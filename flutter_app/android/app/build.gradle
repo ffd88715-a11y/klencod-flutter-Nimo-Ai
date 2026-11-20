@@ -1,0 +1,67 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace = "ai.talkora.app"
+    compileSdk = 35
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    defaultConfig {
+        applicationId = "ai.talkora.app"
+        minSdk = 24
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0.0"
+        multiDexEnabled = true
+    }
+
+    signingConfigs {
+        release {
+            // Configure key.properties for Play Store / production signing
+            storeFile file(System.getenv("TALKORA_KEYSTORE_PATH") ?: "release-keystore.jks")
+            storePassword System.getenv("TALKORA_KEYSTORE_PASSWORD") ?: ""
+            keyAlias System.getenv("TALKORA_KEY_ALIAS") ?: "talkora"
+            keyPassword System.getenv("TALKORA_KEY_PASSWORD") ?: ""
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            debuggable = true
+        }
+        release {
+            minifyEnabled = true
+            shrinkResources = true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            signingConfig = file(System.getenv("TALKORA_KEYSTORE_PATH") ?: "release-keystore.jks").exists()
+                ? signingConfigs.release
+                : signingConfigs.debug
+        }
+    }
+
+    splits {
+        abi {
+            enable = true
+            reset()
+            include "arm64-v8a", "armeabi-v7a"
+            universalApk = true
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}

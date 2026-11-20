@@ -1,0 +1,4 @@
+-keep class ai.talkora.app.** { *; }
+-keep class com.llfbandit.record.** { *; }
+-keep class com.ryanheise.just_audio.** { *; }
+-dontwarn org.slf4j.**

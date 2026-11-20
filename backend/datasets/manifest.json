@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0.0",
+  "datasets": [
+    {
+      "name": "mozilla_common_voice_en",
+      "collection": "listening_materials",
+      "license": "CC0-1.0",
+      "source_url": "https://commonvoice.mozilla.org/",
+      "usage": "Multi-accent English listening samples and STT evaluation",
+      "redistributable": true
+    },
+    {
+      "name": "google_fleurs_en_ar",
+      "collection": "listening_materials",
+      "license": "CC-BY-4.0",
+      "source_url": "https://huggingface.co/datasets/google/fleurs",
+      "usage": "Parallel English/Arabic speech benchmarks",
+      "redistributable": true
+    },
+    {
+      "name": "speechocean762_openslr_101",
+      "collection": "pronunciation",
+      "license": "CC-BY-4.0",
+      "source_url": "https://www.openslr.org/101/",
+      "usage": "Human-expert phoneme & word pronunciation scoring reference",
+      "redistributable": true
+    },
+    {
+      "name": "librispeech_openslr_12",
+      "collection": "listening_materials",
+      "license": "CC-BY-4.0",
+      "source_url": "https://www.openslr.org/12",
+      "usage": "Clean read English audio for comprehension drills",
+      "redistributable": true
+    },
+    {
+      "name": "tatoeba_en_ar",
+      "collection": "arabic_english_explanations",
+      "license": "CC-BY-2.0-FR",
+      "source_url": "https://tatoeba.org/en/downloads",
+      "usage": "Attributed English-Arabic example sentences & everyday expressions",
+      "redistributable": true
+    },
+    {
+      "name": "voxpopuli_accented_en",
+      "collection": "pronunciation",
+      "license": "CC0-1.0",
+      "source_url": "https://github.com/facebookresearch/voxpopuli",
+      "usage": "Non-native L2 accented English robustness evaluation",
+      "redistributable": true
+    },
+    {
+      "name": "opus_open_parallel_en_ar",
+      "collection": "dialogue_examples",
+      "license": "CC-BY-SA-4.0",
+      "source_url": "https://opus.nlpl.eu/",
+      "usage": "Filtered permissive parallel EN-AR corpora (NC corpora excluded)",
+      "redistributable": true
+    },
+    {
+      "name": "jfleg_gec",
+      "collection": "grammar",
+      "license": "RESEARCH-ONLY-VERIFY",
+      "source_url": "https://github.com/keisks/jfleg",
+      "usage": "Offline grammatical error correction benchmarking (excluded from commercial redistribution unless licensed)",
+      "redistributable": false
+    }
+  ]
+}
