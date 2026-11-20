@@ -56,7 +56,7 @@
     </queries>
 
     <application
-        android:label="LISORA AI"
+        android:label="Nimo"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"

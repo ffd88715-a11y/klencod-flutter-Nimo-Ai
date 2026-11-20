@@ -1,13 +1,16 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:talkora_ai/app/theme/app_theme.dart';
+import 'package:talkora_ai/core/audio/sound_fx_service.dart';
 import 'package:talkora_ai/core/knowledge/github_knowledge_service.dart';
+import 'package:talkora_ai/core/knowledge/nimo_local_db_service.dart';
 import 'package:talkora_ai/core/storage/app_state_provider.dart';
 import 'package:talkora_ai/core/widgets/ios_components.dart';
+import 'package:talkora_ai/core/widgets/nimo_clipboard_bar.dart';
 
-/// LISORA AI v3.0 — Massive GitHub Open-Source Knowledge Databases & Local RAG Hub.
+/// Nimo v4.0 Ultra — Mega Knowledge Databases Hub:
+/// Combines 4,300+ Built-In Offline Indexed Records (sub-5ms search) + Live GitHub Mega-Datasets RAG.
 class GithubDbScreen extends ConsumerStatefulWidget {
   const GithubDbScreen({super.key});
 
@@ -17,8 +20,35 @@ class GithubDbScreen extends ConsumerStatefulWidget {
 
 class _GithubDbScreenState extends ConsumerState<GithubDbScreen> {
   final _searchCtrl = TextEditingController();
-  List<KnowledgeEntry> _searchResults = [];
+  String? _selectedCategory;
+  List<LocalDbRecord> _localHits = [];
+  List<KnowledgeEntry> _githubHits = [];
   bool _isSyncingAll = false;
+
+  static const Map<String, String> _catLabelsAr = {
+    'coding': 'البرمجة',
+    'code_bank': 'بنك الأكواد',
+    'code_recipes': 'وصفات كود',
+    'prompts': 'أوامر AI',
+    'english': 'الإنجليزية',
+    'dictionary': 'القاموس',
+    'science': 'العلوم',
+    'world': 'دول العالم',
+    'mobile_dev': 'الموبايل',
+    'backend_cloud': 'الخوادم',
+    'business': 'الأعمال',
+    'fitness': 'اللياقة',
+    'cybersecurity': 'الأمن السيبراني',
+    'ai': 'ذكاء 2026',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _runSearch('');
+    });
+  }
 
   @override
   void dispose() {
@@ -27,22 +57,29 @@ class _GithubDbScreenState extends ConsumerState<GithubDbScreen> {
   }
 
   void _runSearch(String query) {
-    if (query.trim().isEmpty) {
-      setState(() => _searchResults = []);
-      return;
-    }
-    final hits = ref.read(githubKnowledgeProvider.notifier).search(query, limit: 25);
-    setState(() => _searchResults = hits);
+    final q = query.trim();
+    final local = ref
+        .read(nimoLocalDbProvider.notifier)
+        .search(q, category: _selectedCategory, limit: 20);
+    final gh = q.isEmpty
+        ? const <KnowledgeEntry>[]
+        : ref.read(githubKnowledgeProvider.notifier).search(q, limit: 10);
+    setState(() {
+      _localHits = local;
+      _githubHits = gh;
+    });
   }
 
   Future<void> _syncAll() async {
     if (_isSyncingAll) return;
+    NimoSoundFx.click();
     setState(() => _isSyncingAll = true);
     await ref.read(githubKnowledgeProvider.notifier).syncAllBuiltIn();
     if (mounted) setState(() => _isSyncingAll = false);
   }
 
   void _showAddCustomGithubDialog() {
+    NimoSoundFx.click();
     final titleCtrl = TextEditingController();
     final urlCtrl = TextEditingController();
     final isAr = ref.read(learnerProfileProvider).uiLocale == 'ar';
@@ -78,6 +115,7 @@ class _GithubDbScreenState extends ConsumerState<GithubDbScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: Text(isAr ? 'إلغاء' : 'Cancel')),
           FilledButton(
             onPressed: () async {
+              NimoSoundFx.pop();
               final url = urlCtrl.text.trim();
               final title = titleCtrl.text.trim();
               Navigator.pop(ctx);
@@ -91,7 +129,7 @@ class _GithubDbScreenState extends ConsumerState<GithubDbScreen> {
                       content: Text(
                         ok
                             ? (isAr ? 'تم ضم قاعدة البيانات بنجاح!' : 'Dataset added & synced!')
-                            : (isAr ? 'تعذّر تحميل الرابط — تأكد أنه ملف نصي/JSON/CSV صالح.' : 'Failed to sync URL.'),
+                            : (isAr ? 'تعذّر تحميل الرابط.' : 'Failed to sync URL.'),
                       ),
                     ),
                   );
@@ -108,12 +146,14 @@ class _GithubDbScreenState extends ConsumerState<GithubDbScreen> {
   @override
   Widget build(BuildContext context) {
     final gh = ref.watch(githubKnowledgeProvider);
+    final localDb = ref.watch(nimoLocalDbProvider);
     final isAr = ref.watch(learnerProfileProvider).uiLocale == 'ar';
     final theme = Theme.of(context);
+    final totalAll = localDb.totalRecords + gh.totalEntries;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isAr ? 'قواعد بيانات GitHub العملاقة' : 'GitHub Mega-Datasets'),
+        title: Text(isAr ? 'قواعد بيانات Nimo العملاقة' : 'Nimo Mega-Databases'),
         actions: [
           IconButton(
             tooltip: isAr ? 'إضافة رابط GitHub مخصص' : 'Add Custom GitHub URL',
@@ -137,7 +177,7 @@ class _GithubDbScreenState extends ConsumerState<GithubDbScreen> {
                       const IosIconBadge(
                         icon: CupertinoIcons.layers_alt_fill,
                         color: TalkoraColors.iosIndigo,
-                        size: 44,
+                        size: 46,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -146,37 +186,40 @@ class _GithubDbScreenState extends ConsumerState<GithubDbScreen> {
                           children: [
                             Text(
                               isAr
-                                  ? '${gh.totalEntries} سجل معرفي مدمج محلياً'
-                                  : '${gh.totalEntries} Indexed Knowledge Records',
+                                  ? '$totalAll سجل معرفي مفهرس وفوري'
+                                  : '$totalAll Indexed Knowledge Records',
                               style: theme.textTheme.titleMedium,
                             ),
                             Text(
                               isAr
-                                  ? '${gh.syncedSourcesCount} من ${gh.sources.length} قاعدة بيانات متزامنة'
-                                  : '${gh.syncedSourcesCount} of ${gh.sources.length} GitHub repos synced',
-                              style: theme.textTheme.bodySmall,
+                                  ? '${localDb.totalRecords} سجل محلي أوفلاين + ${gh.totalEntries} من GitHub'
+                                  : '${localDb.totalRecords} built-in offline + ${gh.totalEntries} GitHub',
+                              style: theme.textTheme.bodySmall?.copyWith(color: TalkoraColors.iosGreen),
                             ),
                           ],
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
                         child: Text(
                           isAr
-                              ? 'حقن بيانات GitHub تلقائياً في عقل الذكاء الاصطناعي (RAG)'
-                              : 'Auto-inject GitHub Data into AI Brain (RAG)',
+                              ? 'دمج قواعد البيانات تلقائياً في عقل Nimo (RAG فائق السرعة)'
+                              : 'Auto-inject Mega-DB into Nimo Brain (Ultra-Fast RAG)',
                           style: theme.textTheme.bodyMedium,
                         ),
                       ),
                       CupertinoSwitch(
                         value: gh.ragEnabled,
                         activeTrackColor: TalkoraColors.iosGreen,
-                        onChanged: (v) => ref.read(githubKnowledgeProvider.notifier).setRagEnabled(v),
+                        onChanged: (v) {
+                          NimoSoundFx.click();
+                          ref.read(githubKnowledgeProvider.notifier).setRagEnabled(v);
+                        },
                       ),
                     ],
                   ),
@@ -193,7 +236,7 @@ class _GithubDbScreenState extends ConsumerState<GithubDbScreen> {
                                   child: CupertinoActivityIndicator(color: Colors.white),
                                 )
                               : const Icon(CupertinoIcons.cloud_download_fill, size: 18),
-                          label: Text(isAr ? 'مزامنة كل القواعد الآن' : 'Sync All Datasets'),
+                          label: Text(isAr ? 'مزامنة GitHub الإضافية' : 'Sync GitHub Packs'),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -209,161 +252,181 @@ class _GithubDbScreenState extends ConsumerState<GithubDbScreen> {
             ),
           ),
 
-          if (gh.lastError != null) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: TalkoraColors.iosRed.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(gh.lastError!, style: const TextStyle(color: TalkoraColors.iosRed, fontSize: 12.5)),
-            ),
-          ],
+          const SizedBox(height: 14),
 
-          const SizedBox(height: 16),
-
-          // Live Search Across Synced GitHub Data
+          // Instant Sub-5ms Search Box with Paste Button
           TextField(
             controller: _searchCtrl,
             onChanged: _runSearch,
             decoration: InputDecoration(
               hintText: isAr
-                  ? 'ابحث داخل قواعد بيانات GitHub المدمجة...'
-                  : 'Search inside synced GitHub datasets...',
+                  ? 'ابحث فورياً داخل $totalAll سجل (برمجة، إنجليزية، علوم، أوامر AI)...'
+                  : 'Instant search across $totalAll records...',
               prefixIcon: const Icon(CupertinoIcons.search),
-              suffixIcon: _searchCtrl.text.isNotEmpty
-                  ? IconButton(
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: isAr ? 'لصق' : 'Paste',
+                    icon: const Icon(CupertinoIcons.doc_on_clipboard, size: 18),
+                    onPressed: () async {
+                      final ok = await NimoClipboardHelper.pasteIntoController(
+                        context,
+                        _searchCtrl,
+                        isAr: isAr,
+                      );
+                      if (ok) _runSearch(_searchCtrl.text);
+                    },
+                  ),
+                  if (_searchCtrl.text.isNotEmpty)
+                    IconButton(
                       icon: const Icon(CupertinoIcons.clear_circled_solid, size: 18),
                       onPressed: () {
+                        NimoSoundFx.click();
                         _searchCtrl.clear();
                         _runSearch('');
                       },
-                    )
-                  : null,
-            ),
-          ),
-
-          if (_searchResults.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              isAr ? 'نتائج البحث (${_searchResults.length})' : 'Search Results (${_searchResults.length})',
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            ..._searchResults.map(
-              (entry) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Card(
-                  child: ListTile(
-                    title: Text(entry.title, style: theme.textTheme.titleMedium?.copyWith(fontSize: 14.5)),
-                    subtitle: Text(
-                      entry.content,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall,
                     ),
-                    trailing: IconButton(
-                      icon: const Icon(CupertinoIcons.doc_on_clipboard, size: 18),
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: '${entry.title}\n${entry.content}'));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(isAr ? 'تم نسخ السجل' : 'Copied record')),
-                        );
-                      },
-                    ),
-                  ),
-                ),
+                ],
               ),
             ),
-          ],
-
-          const SizedBox(height: 20),
-          Text(
-            isAr ? 'مستودعات قواعد البيانات المتاحة على GitHub' : 'Available GitHub Knowledge Repositories',
-            style: theme.textTheme.titleLarge,
           ),
           const SizedBox(height: 10),
 
-          ...gh.sources.map((src) {
-            final count = gh.entriesBySource[src.id]?.length ?? 0;
-            final isSyncing = gh.syncingIds.contains(src.id);
-            final synced = count > 0;
+          // Category Filter Chips
+          SizedBox(
+            height: 38,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: 8),
+                  child: ChoiceChip(
+                    label: Text(isAr ? 'الكل (${localDb.totalRecords})' : 'All (${localDb.totalRecords})',
+                        style: const TextStyle(fontSize: 12)),
+                    selected: _selectedCategory == null,
+                    onSelected: (_) {
+                      NimoSoundFx.click();
+                      setState(() => _selectedCategory = null);
+                      _runSearch(_searchCtrl.text);
+                    },
+                  ),
+                ),
+                ...localDb.categoryCounts.entries.map((e) {
+                  final label = isAr ? (_catLabelsAr[e.key] ?? e.key) : e.key;
+                  return Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 8),
+                    child: ChoiceChip(
+                      label: Text('$label (${e.value})', style: const TextStyle(fontSize: 12)),
+                      selected: _selectedCategory == e.key,
+                      onSelected: (_) {
+                        NimoSoundFx.click();
+                        setState(() => _selectedCategory = e.key);
+                        _runSearch(_searchCtrl.text);
+                      },
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
 
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
+          // Instant Results Preview
+          Text(
+            _searchCtrl.text.trim().isEmpty
+                ? (isAr ? 'عينة من قاعدة Nimo المحلية (تعمل بدون إنترنت)' : 'Nimo Offline Database Preview')
+                : (isAr
+                    ? 'نتائج البحث الفوري (${_localHits.length + _githubHits.length})'
+                    : 'Instant Results (${_localHits.length + _githubHits.length})'),
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          ..._localHits.map(
+            (rec) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
               child: Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          IosIconBadge(
-                            icon: CupertinoIcons.cube_box_fill,
-                            color: synced ? TalkoraColors.iosGreen : TalkoraColors.iosBlue,
-                            size: 36,
-                          ),
-                          const SizedBox(width: 12),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  isAr ? src.titleAr : src.titleEn,
-                                  style: theme.textTheme.titleMedium?.copyWith(fontSize: 15),
-                                ),
-                                Text(
-                                  '${src.repoSlug} • ${src.format.toUpperCase()}',
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                              ],
+                            child: Text(
+                              rec.title,
+                              style: theme.textTheme.titleMedium?.copyWith(fontSize: 14.2),
                             ),
                           ),
-                          if (src.isCustom)
-                            IconButton(
-                              icon: const Icon(CupertinoIcons.trash, color: TalkoraColors.iosRed, size: 19),
-                              onPressed: () =>
-                                  ref.read(githubKnowledgeProvider.notifier).removeCustomSource(src.id),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        isAr ? src.descriptionAr : src.descriptionEn,
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          IosStatusPill(
-                            label: synced
-                                ? (isAr ? 'مدمج: $count سجل' : 'Synced: $count records')
-                                : (isAr ? 'غير متزامن بعد' : 'Not synced yet'),
-                            color: synced ? TalkoraColors.iosGreen : TalkoraColors.iosOrange,
-                          ),
-                          FilledButton.tonalIcon(
-                            onPressed: isSyncing
-                                ? null
-                                : () => ref.read(githubKnowledgeProvider.notifier).syncSource(src.id),
-                            icon: isSyncing
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CupertinoActivityIndicator(),
-                                  )
-                                : Icon(
-                                    synced ? CupertinoIcons.refresh : CupertinoIcons.cloud_download,
-                                    size: 16,
-                                  ),
-                            label: Text(synced ? (isAr ? 'تحديث' : 'Refresh') : (isAr ? 'تحميل ودمج' : 'Sync Now')),
+                          NimoCopyChip(
+                            textToCopy: '${rec.title}\n${rec.body}',
+                            isAr: isAr,
+                            compact: true,
                           ),
                         ],
                       ),
+                      const SizedBox(height: 4),
+                      SelectableText(rec.body, style: theme.textTheme.bodyMedium),
                     ],
                   ),
+                ),
+              ),
+            ),
+          ),
+          ..._githubHits.map(
+            (entry) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Card(
+                child: ListTile(
+                  title: Text(entry.title, style: theme.textTheme.titleMedium?.copyWith(fontSize: 14.2)),
+                  subtitle: Text(entry.content, maxLines: 3, overflow: TextOverflow.ellipsis),
+                  trailing: NimoCopyChip(
+                    textToCopy: '${entry.title}\n${entry.content}',
+                    isAr: isAr,
+                    compact: true,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 18),
+          Text(
+            isAr ? 'قواعد بيانات GitHub السحابية الإضافية' : 'Live GitHub Cloud Datasets',
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          ...gh.sources.map((src) {
+            final count = gh.entriesBySource[src.id]?.length ?? 0;
+            final syncing = gh.syncingIds.contains(src.id);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Card(
+                child: ListTile(
+                  leading: const IosIconBadge(
+                    icon: CupertinoIcons.cloud_fill,
+                    color: TalkoraColors.iosBlue,
+                    size: 36,
+                  ),
+                  title: Text(isAr ? src.titleAr : src.titleEn,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
+                  subtitle: Text(
+                    count > 0
+                        ? (isAr ? '$count سجل متزامن • ${src.repoSlug}' : '$count synced • ${src.repoSlug}')
+                        : (isAr ? src.descriptionAr : src.descriptionEn),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: syncing
+                      ? const CupertinoActivityIndicator()
+                      : FilledButton.tonal(
+                          onPressed: () {
+                            NimoSoundFx.click();
+                            ref.read(githubKnowledgeProvider.notifier).syncSource(src.id);
+                          },
+                          child: Text(count > 0 ? (isAr ? 'تحديث' : 'Refresh') : (isAr ? 'تحميل' : 'Sync')),
+                        ),
                 ),
               ),
             );

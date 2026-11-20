@@ -7,7 +7,9 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
+import android.media.AudioManager
 import android.net.Uri
+import android.view.SoundEffectConstants
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
@@ -87,12 +89,26 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                         }
                         result.success(true)
                     }
+                    "playClickSound" -> {
+                        try {
+                            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                            am.playSoundEffect(SoundEffectConstants.CLICK, 0.7f)
+                            result.success(true)
+                        } catch (_: Exception) {
+                            result.success(false)
+                        }
+                    }
+                    "getAvailableVoices" -> {
+                        val prefix = call.argument<String>("localePrefix") ?: ""
+                        result.success(listHighQualityVoices(prefix))
+                    }
                     "speak" -> {
                         val text = call.argument<String>("text") ?: ""
                         val locale = call.argument<String>("locale") ?: "ar-EG"
-                        val rate = (call.argument<Double>("rate") ?: 1.0).toFloat()
-                        val pitch = (call.argument<Double>("pitch") ?: 1.0).toFloat()
-                        speakText(text, locale, rate, pitch, result)
+                        val rate = (call.argument<Double>("rate") ?: 0.98).toFloat()
+                        val pitch = (call.argument<Double>("pitch") ?: 0.97).toFloat()
+                        val voiceName = call.argument<String>("voiceName")
+                        speakText(text, locale, rate, pitch, voiceName, result)
                     }
                     "stopSpeaking" -> {
                         try {
@@ -137,12 +153,12 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                     "setAlarm" -> {
                         val hour = call.argument<Int>("hour") ?: 7
                         val minute = call.argument<Int>("minute") ?: 0
-                        val message = call.argument<String>("message") ?: "LISORA AI Alarm"
+                        val message = call.argument<String>("message") ?: "Nimo Alarm"
                         result.success(createAlarm(hour, minute, message))
                     }
                     "setTimer" -> {
                         val seconds = call.argument<Int>("seconds") ?: 60
-                        val message = call.argument<String>("message") ?: "LISORA AI Timer"
+                        val message = call.argument<String>("message") ?: "Nimo Timer"
                         result.success(createTimer(seconds, message))
                     }
                     "openMaps" -> {
@@ -167,12 +183,12 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                     }
                     "shareText" -> {
                         val text = call.argument<String>("text") ?: ""
-                        val subject = call.argument<String>("subject") ?: "LISORA AI"
+                        val subject = call.argument<String>("subject") ?: "Nimo"
                         result.success(sharePlainText(text, subject))
                     }
                     "saveImageToGallery" -> {
                         val bytes = call.argument<ByteArray>("bytes")
-                        val fileName = call.argument<String>("fileName") ?: "lisora_${System.currentTimeMillis()}.png"
+                        val fileName = call.argument<String>("fileName") ?: "nimo_${System.currentTimeMillis()}.png"
                         if (bytes != null && bytes.isNotEmpty()) {
                             result.success(saveImageBytesToGallery(bytes, fileName))
                         } else {
@@ -209,11 +225,70 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun listHighQualityVoices(localePrefix: String): List<Map<String, Any>> {
+        val out = mutableListOf<Map<String, Any>>()
+        try {
+            val voices = tts?.voices ?: return out
+            val pfx = localePrefix.lowercase(Locale.ROOT)
+            val filtered = voices.filter { v ->
+                val tag = v.locale?.toLanguageTag()?.lowercase(Locale.ROOT) ?: ""
+                pfx.isEmpty() || tag.startsWith(pfx)
+            }.sortedByDescending { v ->
+                var score = v.quality
+                val n = v.name.lowercase(Locale.ROOT)
+                if (n.contains("neural") || n.contains("wavenet") || n.contains("studio")) score += 300
+                if (v.isNetworkConnectionRequired) score += 120
+                score
+            }
+            for (v in filtered.take(25)) {
+                out.add(
+                    mapOf(
+                        "name" to v.name,
+                        "locale" to (v.locale?.toLanguageTag() ?: ""),
+                        "quality" to v.quality,
+                        "isNetwork" to v.isNetworkConnectionRequired
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+        return out
+    }
+
+    private fun pickBestHumanVoice(targetLocale: Locale, requestedVoiceName: String?) {
+        try {
+            val voices = tts?.voices ?: return
+            if (!requestedVoiceName.isNullOrBlank()) {
+                val exact = voices.firstOrNull { it.name == requestedVoiceName }
+                if (exact != null) {
+                    tts?.voice = exact
+                    return
+                }
+            }
+            val lang = targetLocale.language.lowercase(Locale.ROOT)
+            val country = targetLocale.country.lowercase(Locale.ROOT)
+            val best = voices
+                .filter { (it.locale?.language ?: "").lowercase(Locale.ROOT) == lang }
+                .maxByOrNull { v ->
+                    var score = v.quality
+                    val n = v.name.lowercase(Locale.ROOT)
+                    if (n.contains("neural") || n.contains("wavenet") || n.contains("natural") || n.contains("studio")) score += 400
+                    if (n.contains("network") || v.isNetworkConnectionRequired) score += 150
+                    if (country.isNotEmpty() && (v.locale?.country ?: "").lowercase(Locale.ROOT) == country) score += 90
+                    if (n.contains("local")) score -= 20
+                    score
+                }
+            if (best != null) {
+                tts?.voice = best
+            }
+        } catch (_: Exception) {}
+    }
+
     private fun speakText(
         text: String,
         localeTag: String,
         rate: Float,
         pitch: Float,
+        voiceName: String?,
         result: MethodChannel.Result
     ) {
         if (!ttsReady || tts == null || text.isBlank()) {
@@ -232,8 +307,9 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                     tts?.setLanguage(Locale.US)
                 }
             }
-            tts?.setSpeechRate(rate.coerceIn(0.5f, 2.0f))
-            tts?.setPitch(pitch.coerceIn(0.5f, 1.8f))
+            pickBestHumanVoice(targetLocale, voiceName)
+            tts?.setSpeechRate(rate.coerceIn(0.55f, 1.8f))
+            tts?.setPitch(pitch.coerceIn(0.75f, 1.35f))
             val utteranceId = UUID.randomUUID().toString()
             val cleanText = text.replace(Regex("[*#`_~]"), " ").trim()
             val clipped = if (cleanText.length > 3500) cleanText.substring(0, 3500) else cleanText
@@ -652,7 +728,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                 val values = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
                     put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-                    put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/LisoraAI")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/Nimo")
                     put(MediaStore.Images.Media.IS_PENDING, 1)
                 }
                 val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
@@ -668,7 +744,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                 @Suppress("DEPRECATION")
                 val dir = File(
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
-                    "LisoraAI"
+                    "Nimo"
                 )
                 if (!dir.exists()) dir.mkdirs()
                 val file = File(dir, fileName)

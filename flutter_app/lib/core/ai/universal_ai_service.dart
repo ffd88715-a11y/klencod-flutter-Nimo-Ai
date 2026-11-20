@@ -287,8 +287,8 @@ class UniversalAiService {
     final headers = <String, dynamic>{
       'Content-Type': 'application/json',
       if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
-      if (isOpenRouter) 'HTTP-Referer': 'https://lisora.ai',
-      if (isOpenRouter) 'X-Title': 'LISORA AI v3.0',
+      if (isOpenRouter) 'HTTP-Referer': 'https://nimo.ai',
+      if (isOpenRouter) 'X-Title': 'Nimo v4.0 Ultra',
     };
 
     final res = await _dio.post<Map<String, dynamic>>(

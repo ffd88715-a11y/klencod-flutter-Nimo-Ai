@@ -2,14 +2,19 @@ import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:talkora_ai/app/theme/app_theme.dart';
 import 'package:talkora_ai/core/ai/ai_provider_models.dart';
 import 'package:talkora_ai/core/ai/image_gen_service.dart';
+import 'package:talkora_ai/core/audio/sound_fx_service.dart';
 import 'package:talkora_ai/core/device/native_bridge_service.dart';
 import 'package:talkora_ai/core/storage/app_state_provider.dart';
 import 'package:talkora_ai/core/widgets/ios_components.dart';
+import 'package:talkora_ai/core/widgets/nimo_clipboard_bar.dart';
 
-/// LISORA AI v3.0 — AI Image Generation Studio (Free Pollinations Flux + DALL-E 3 + HF FLUX).
+/// Nimo v4.0 Ultra — Key-Aware AI Image Studio.
+/// Automatically uses the image model of the active API key (Gemini Nano Banana 2.1,
+/// OpenAI GPT-Image-2.5, xAI Grok Image, HuggingFace FLUX, Custom API, or Free Flux).
 class ImageStudioScreen extends ConsumerStatefulWidget {
   const ImageStudioScreen({super.key});
 
@@ -19,8 +24,9 @@ class ImageStudioScreen extends ConsumerStatefulWidget {
 
 class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
   final _promptCtrl = TextEditingController();
+  final _customModelCtrl = TextEditingController();
   String _selectedStyle = 'realistic';
-  String _selectedEngine = 'pollinations_flux';
+  String _selectedEngine = 'auto_key';
   String _selectedAspect = '1:1';
   bool _isGenerating = false;
   bool _isEnhancing = false;
@@ -50,21 +56,26 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
   };
 
   static const Map<String, String> _engineLabels = {
-    'pollinations_flux': 'Flux AI (مجاني)',
-    'pollinations_turbo': 'Turbo Fast (مجاني)',
-    'openai_dalle3': 'OpenAI DALL-E 3',
-    'hf_flux': 'HuggingFace FLUX',
+    'auto_key': 'تلقائي حسب المفتاح النشط',
+    'gemini_key': 'Gemini (Nano Banana 2.1)',
+    'openai_key': 'OpenAI (GPT-Image-2.5)',
+    'xai_key': 'xAI Grok Image',
+    'hf_flux': 'HuggingFace FLUX.1',
+    'pollinations_flux': 'Nimo Flux (مجاني)',
+    'pollinations_turbo': 'Nimo Turbo (مجاني)',
   };
 
   @override
   void initState() {
     super.initState();
+    _customModelCtrl.text = ref.read(aiSettingsProvider).customImageModel;
     _loadHistory();
   }
 
   @override
   void dispose() {
     _promptCtrl.dispose();
+    _customModelCtrl.dispose();
     super.dispose();
   }
 
@@ -89,6 +100,7 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
   Future<void> _enhancePromptWithAi() async {
     final raw = _promptCtrl.text.trim();
     if (raw.isEmpty || _isEnhancing) return;
+    NimoSoundFx.click();
     setState(() => _isEnhancing = true);
 
     final ai = ref.read(aiSettingsProvider);
@@ -113,6 +125,10 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
   Future<void> _generate() async {
     final prompt = _promptCtrl.text.trim();
     if (prompt.isEmpty || _isGenerating) return;
+    NimoSoundFx.pop();
+
+    final overrideModel = _customModelCtrl.text.trim();
+    await ref.read(aiSettingsProvider.notifier).updateAdvanced(customImageModel: overrideModel);
 
     setState(() {
       _isGenerating = true;
@@ -128,6 +144,7 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
           width: dims.$1,
           height: dims.$2,
           aiSettings: aiSettings,
+          modelOverride: overrideModel,
         );
 
     if (!mounted) return;
@@ -146,17 +163,18 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
 
   Future<void> _saveToGallery() async {
     if (_currentBytes == null) return;
+    NimoSoundFx.pop();
     final isAr = ref.read(learnerProfileProvider).uiLocale == 'ar';
     final ok = await ref.read(nativeBridgeProvider).saveImageToGallery(
           _currentBytes!,
-          'lisora_ai_${DateTime.now().millisecondsSinceEpoch}.png',
+          'nimo_${DateTime.now().millisecondsSinceEpoch}.png',
         );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           ok
-              ? (isAr ? 'تم حفظ الصورة في المعرض (Pictures/LisoraAI)!' : 'Saved to Gallery (Pictures/LisoraAI)!')
+              ? (isAr ? 'تم حفظ الصورة في المعرض (Pictures/Nimo)!' : 'Saved to Gallery (Pictures/Nimo)!')
               : (isAr ? 'تعذّر الحفظ — تأكد من الصلاحيات.' : 'Failed to save image.'),
         ),
       ),
@@ -166,18 +184,29 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
   @override
   Widget build(BuildContext context) {
     final isAr = ref.watch(learnerProfileProvider).uiLocale == 'ar';
+    final ai = ref.watch(aiSettingsProvider);
     final theme = Theme.of(context);
     final styleMap = isAr ? _styleLabelsAr : _styleLabelsEn;
+    final activeRouteLabel = ImageGenService.describeActiveKeyRoute(ai, isAr: isAr);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isAr ? 'استوديو توليد الصور AI' : 'AI Image Studio'),
+        title: Text(isAr ? 'مولد صور Nimo الذكي' : 'Nimo Image Studio'),
         actions: [
+          IconButton(
+            tooltip: isAr ? 'إعدادات المفاتيح' : 'API Keys',
+            icon: const Icon(CupertinoIcons.slider_horizontal_3, size: 20),
+            onPressed: () {
+              NimoSoundFx.click();
+              context.push('/settings');
+            },
+          ),
           if (_history.isNotEmpty)
             IconButton(
               tooltip: isAr ? 'مسح السجل' : 'Clear History',
               icon: const Icon(CupertinoIcons.trash, size: 20),
               onPressed: () async {
+                NimoSoundFx.click();
                 await ref.read(imageGenServiceProvider).clearHistory();
                 await _loadHistory();
               },
@@ -187,7 +216,22 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
-          // Prompt Composer Card
+          // Live Active Key Image Model Indicator
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              children: [
+                IosStatusPill(
+                  label: isAr ? 'المفتاح النشط: $activeRouteLabel' : 'Active Key: $activeRouteLabel',
+                  color: TalkoraColors.iosGreen,
+                  icon: CupertinoIcons.lock_shield_fill,
+                  onTap: () => context.push('/settings'),
+                ),
+              ],
+            ),
+          ),
+
+          // Prompt Composer Card with Paste
           IosGroupedSection(
             header: isAr ? 'وصف الصورة (عربي أو إنجليزي)' : 'IMAGE PROMPT',
             children: [
@@ -203,6 +247,15 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
                         hintText: isAr
                             ? 'مثال: رائد فضاء يمشي في شوارع القاهرة القديمة وقت الغروب...'
                             : 'Describe the image you want to create...',
+                        suffixIcon: IconButton(
+                          tooltip: isAr ? 'لصق' : 'Paste',
+                          icon: const Icon(CupertinoIcons.doc_on_clipboard, size: 19),
+                          onPressed: () => NimoClipboardHelper.pasteIntoController(
+                            context,
+                            _promptCtrl,
+                            isAr: isAr,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -219,7 +272,7 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
                                   )
                                 : const Icon(CupertinoIcons.wand_stars, size: 17),
                             label: Text(
-                              isAr ? 'تحسين الوصف بالذكاء' : 'AI Enhance Prompt',
+                              isAr ? 'تحسين الوصف' : 'Enhance',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -247,9 +300,9 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
             ],
           ),
 
-          // Engine & Aspect Ratio Selector
+          // Key-Based Engine & Optional Model Override
           IosGroupedSection(
-            header: isAr ? 'محرك التوليد والأبعاد' : 'ENGINE & ASPECT RATIO',
+            header: isAr ? 'نموذج التوليد المرتبط بالمفتاح والأبعاد' : 'KEY-BASED IMAGE MODEL & RATIO',
             children: [
               Padding(
                 padding: const EdgeInsets.all(14),
@@ -264,9 +317,22 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
                         return ChoiceChip(
                           label: Text(e.value, style: const TextStyle(fontSize: 12)),
                           selected: selected,
-                          onSelected: (_) => setState(() => _selectedEngine = e.key),
+                          onSelected: (_) {
+                            NimoSoundFx.click();
+                            setState(() => _selectedEngine = e.key);
+                          },
                         );
                       }).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _customModelCtrl,
+                      decoration: InputDecoration(
+                        labelText: isAr
+                            ? 'تخصيص اسم نموذج الصور (اختياري — اتركه فارغاً للتلقائي)'
+                            : 'Custom Image Model ID (optional)',
+                        hintText: 'gemini-nano-banana-2.1 / gpt-image-2.5-flare / dall-e-3',
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Wrap(
@@ -275,7 +341,10 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
                         return ChoiceChip(
                           label: Text(ratio, style: const TextStyle(fontSize: 12)),
                           selected: _selectedAspect == ratio,
-                          onSelected: (_) => setState(() => _selectedAspect = ratio),
+                          onSelected: (_) {
+                            NimoSoundFx.click();
+                            setState(() => _selectedAspect = ratio);
+                          },
                         );
                       }).toList(),
                     ),
@@ -300,13 +369,15 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
               return ChoiceChip(
                 label: Text(e.value, style: const TextStyle(fontSize: 12.5)),
                 selected: _selectedStyle == e.key,
-                onSelected: (_) => setState(() => _selectedStyle = e.key),
+                onSelected: (_) {
+                  NimoSoundFx.click();
+                  setState(() => _selectedStyle = e.key);
+                },
               );
             }).toList(),
           ),
           const SizedBox(height: 18),
 
-          // Error Feedback
           if (_errorText != null)
             Container(
               padding: const EdgeInsets.all(12),
@@ -318,7 +389,6 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
               child: Text(_errorText!, style: const TextStyle(color: TalkoraColors.iosRed)),
             ),
 
-          // Generated Image Preview Card
           if (_isGenerating)
             Card(
               child: Padding(
@@ -328,7 +398,7 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
                     const CupertinoActivityIndicator(radius: 16),
                     const SizedBox(height: 14),
                     Text(
-                      isAr ? 'جاري رسم صورتك بالذكاء الاصطناعي...' : 'Generating your masterpiece...',
+                      isAr ? 'جاري التوليد عبر نموذج المفتاح النشط...' : 'Generating via active key model...',
                       style: theme.textTheme.titleMedium,
                     ),
                   ],
@@ -363,16 +433,10 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
                               ),
                             ),
                             const SizedBox(width: 10),
-                            IconButton.filledTonal(
-                              onPressed: () {
-                                if (_currentItem?.imageUrl.isNotEmpty ?? false) {
-                                  ref.read(nativeBridgeProvider).shareText(
-                                        '${_currentItem!.prompt}\n${_currentItem!.imageUrl}',
-                                        subject: 'LISORA AI Image',
-                                      );
-                                }
-                              },
-                              icon: const Icon(CupertinoIcons.share),
+                            NimoCopyChip(
+                              textToCopy: _currentItem?.prompt ?? _promptCtrl.text,
+                              isAr: isAr,
+                              label: isAr ? 'نسخ الوصف' : 'Copy Prompt',
                             ),
                           ],
                         ),
@@ -383,7 +447,6 @@ class _ImageStudioScreenState extends ConsumerState<ImageStudioScreen> {
               ),
             ),
 
-          // Recent Generations Gallery
           if (_history.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text(

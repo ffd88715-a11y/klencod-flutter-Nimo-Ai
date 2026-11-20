@@ -1,8 +1,10 @@
+import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:talkora_ai/app/theme/app_theme.dart';
+import 'package:talkora_ai/core/audio/sound_fx_service.dart';
 
-/// Authentic iOS 18 Inset Grouped Section with subtle header, hairline dividers, and footer.
+/// Authentic iOS Inset Grouped Section with subtle header, hairline dividers, and footer.
 class IosGroupedSection extends StatelessWidget {
   final String? header;
   final String? footer;
@@ -83,35 +85,195 @@ class IosGroupedSection extends StatelessWidget {
   }
 }
 
-/// Authentic iOS Squircle Icon Badge (29x29 rounded square like Apple Settings).
-class IosIconBadge extends StatelessWidget {
+/// Nimo Liquid Glass Animated Icon Badge — translucent frosted glass surface,
+/// crisp specular glass rim, subtle animated diagonal light sweep, and spring feel.
+class IosIconBadge extends StatefulWidget {
   final IconData icon;
   final Color color;
   final double size;
+  final bool animatedGlass;
 
   const IosIconBadge({
     super.key,
     required this.icon,
     required this.color,
     this.size = 30,
+    this.animatedGlass = true,
   });
 
   @override
+  State<IosIconBadge> createState() => _IosIconBadgeState();
+}
+
+class _IosIconBadgeState extends State<IosIconBadge> with SingleTickerProviderStateMixin {
+  late final AnimationController _shimmerCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _shimmerCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3400),
+    );
+    if (widget.animatedGlass) {
+      _shimmerCtrl.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant IosIconBadge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.animatedGlass && !_shimmerCtrl.isAnimating) {
+      _shimmerCtrl.repeat();
+    } else if (!widget.animatedGlass && _shimmerCtrl.isAnimating) {
+      _shimmerCtrl.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _shimmerCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(size * 0.24),
-      ),
-      alignment: Alignment.center,
-      child: Icon(icon, color: Colors.white, size: size * 0.58),
+    final radius = BorderRadius.circular(widget.size * 0.28);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return AnimatedBuilder(
+      animation: _shimmerCtrl,
+      builder: (_, __) {
+        final t = _shimmerCtrl.value;
+        // Diagonal glass reflection sweep (-1.6 to +1.6)
+        final sweep = -1.6 + (t * 3.2);
+        return Container(
+          width: widget.size,
+          height: widget.size,
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                widget.color.withValues(alpha: isDark ? 0.82 : 0.92),
+                widget.color.withValues(alpha: isDark ? 0.45 : 0.68),
+              ],
+            ),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: isDark ? 0.30 : 0.55),
+              width: 0.9,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: widget.color.withValues(alpha: isDark ? 0.22 : 0.18),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Top-left frosted glass gloss cap
+              Positioned(
+                top: -widget.size * 0.35,
+                left: -widget.size * 0.2,
+                right: -widget.size * 0.2,
+                height: widget.size * 0.72,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.white.withValues(alpha: 0.38),
+                        Colors.white.withValues(alpha: 0.0),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(widget.size),
+                  ),
+                ),
+              ),
+              // Animated diagonal specular glass shimmer beam
+              if (widget.animatedGlass)
+                Positioned.fill(
+                  child: Transform.rotate(
+                    angle: math.pi / 6,
+                    child: FractionallySizedBox(
+                      widthFactor: 0.42,
+                      alignment: Alignment(sweep, 0),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.white.withValues(alpha: 0.0),
+                              Colors.white.withValues(alpha: 0.30),
+                              Colors.white.withValues(alpha: 0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              Icon(widget.icon, color: Colors.white, size: widget.size * 0.56),
+            ],
+          ),
+        );
+      },
     );
   }
 }
 
-/// Authentic iOS Settings Row with squircle icon, title, subtitle/value, and chevron.
+/// Interactive Glass Press Wrapper with smooth spring scale + click sound.
+class NimoGlassTap extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final BorderRadius? borderRadius;
+
+  const NimoGlassTap({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.onLongPress,
+    this.borderRadius,
+  });
+
+  @override
+  State<NimoGlassTap> createState() => _NimoGlassTapState();
+}
+
+class _NimoGlassTapState extends State<NimoGlassTap> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: widget.onTap == null ? null : (_) => setState(() => _pressed = true),
+      onTapUp: widget.onTap == null ? null : (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      onLongPress: widget.onLongPress,
+      onTap: widget.onTap == null
+          ? null
+          : () {
+              NimoSoundFx.click();
+              widget.onTap?.call();
+            },
+      child: AnimatedScale(
+        scale: _pressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOutCubic,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// Authentic iOS Settings Row with Liquid Glass icon, title, subtitle/value, click sound, and chevron.
 class IosSettingsRow extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
@@ -141,7 +303,12 @@ class IosSettingsRow extends StatelessWidget {
     final secondaryColor = isDark ? TalkoraColors.darkSecondaryText : TalkoraColors.lightSecondaryText;
 
     return InkWell(
-      onTap: onTap,
+      onTap: onTap == null
+          ? null
+          : () {
+              NimoSoundFx.click();
+              onTap?.call();
+            },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         child: Row(
@@ -203,7 +370,7 @@ class IosSettingsRow extends StatelessWidget {
   }
 }
 
-/// iOS Status Pill Badge (e.g., Active AI Model indicator).
+/// iOS Status Pill Badge (e.g., Active AI Model indicator) with subtle glass border.
 class IosStatusPill extends StatelessWidget {
   final String label;
   final Color color;
@@ -223,8 +390,9 @@ class IosStatusPill extends StatelessWidget {
     final child = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.28), width: 0.7),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -256,6 +424,6 @@ class IosStatusPill extends StatelessWidget {
       ),
     );
     if (onTap == null) return child;
-    return GestureDetector(onTap: onTap, child: child);
+    return NimoGlassTap(onTap: onTap, child: child);
   }
 }

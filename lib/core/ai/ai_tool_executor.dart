@@ -26,7 +26,7 @@ class AiToolExecutor {
 
   /// Instructions injected into the AI system prompt when Device Control is enabled.
   static const String systemToolPrompt = '''
-You are LISORA AI v3.0 — an ultra-powerful assistant with FULL phone & app control.
+You are Nimo v4.0 Ultra — an ultra-powerful assistant with FULL phone & app control.
 When the user asks you to perform a phone action or generate an image, include ONE exact action tag at the end of your reply:
 - Open any app: [ACTION:open_app|app_name]
 - Send WhatsApp message: [ACTION:whatsapp|phone_number|message]
@@ -226,7 +226,7 @@ Only include an [ACTION:...] tag when the user actually requests that action. Al
         break;
       case 'alarm':
         final timeStr = rawArgs.isNotEmpty ? rawArgs[0] : '07:00';
-        final label = rawArgs.length > 1 ? rawArgs[1] : 'LISORA AI';
+        final label = rawArgs.length > 1 ? rawArgs[1] : 'Nimo';
         final parts = timeStr.split(':');
         final h = int.tryParse(parts.isNotEmpty ? parts[0] : '7') ?? 7;
         final m = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
@@ -235,7 +235,7 @@ Only include an [ACTION:...] tag when the user actually requests that action. Al
         break;
       case 'timer':
         final secs = int.tryParse(rawArgs.isNotEmpty ? rawArgs[0] : '60') ?? 60;
-        final label = rawArgs.length > 1 ? rawArgs[1] : 'LISORA AI Timer';
+        final label = rawArgs.length > 1 ? rawArgs[1] : 'Nimo Timer';
         await bridge.setTimer(seconds: secs, message: label);
         badge = isArabic ? 'تم ضبط مؤقت: $secs ثانية' : 'Timer set: ${secs}s';
         break;

@@ -6,7 +6,7 @@ import 'package:talkora_ai/core/device/native_bridge_service.dart';
 import 'package:talkora_ai/core/storage/app_state_provider.dart';
 import 'package:talkora_ai/core/widgets/ios_components.dart';
 
-/// LISORA AI v3.0 — Full Phone & Installed Apps Management Hub.
+/// Nimo v4.0 Ultra — Full Phone & Installed Apps Management Hub.
 class DeviceHubScreen extends ConsumerStatefulWidget {
   const DeviceHubScreen({super.key});
 
@@ -191,7 +191,7 @@ class _DeviceHubScreenState extends ConsumerState<DeviceHubScreen> {
                     final p = t.split(':');
                     final h = int.tryParse(p.isNotEmpty ? p[0] : '7') ?? 7;
                     final m = int.tryParse(p.length > 1 ? p[1] : '0') ?? 0;
-                    await bridge.setAlarm(hour: h, minute: m, message: msg.isEmpty ? 'LISORA AI' : msg);
+                    await bridge.setAlarm(hour: h, minute: m, message: msg.isEmpty ? 'Nimo' : msg);
                   },
                 ),
               ),

@@ -7,9 +7,11 @@ import 'package:talkora_ai/app/theme/app_theme.dart';
 import 'package:talkora_ai/core/ai/ai_provider_models.dart';
 import 'package:talkora_ai/core/device/native_bridge_service.dart';
 import 'package:talkora_ai/core/storage/app_state_provider.dart';
+import 'package:talkora_ai/core/audio/realistic_tts_service.dart';
+import 'package:talkora_ai/core/audio/sound_fx_service.dart';
 import 'package:talkora_ai/core/widgets/ios_components.dart';
 
-/// LISORA AI v3.0 — Smart AI Keys Control Center, Step-by-Step Key Guides & Developer Info (YOSSEF JOO).
+/// Nimo v4.0 Ultra — Smart AI Keys Control Center, Step-by-Step Key Guides & Developer Info (YOSSEF JOO).
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -640,6 +642,93 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
           ),
 
+          // Nimo v4.0 Ultra — Liquid Glass, Tactile Click Sound & Realistic Human Voice
+          IosGroupedSection(
+            header: isAr ? 'تجربة Nimo الزجاجية والصوت البشري' : 'NIMO GLASS, CLICK SOUND & HUMAN VOICE',
+            children: [
+              IosSettingsRow(
+                icon: CupertinoIcons.speaker_2_fill,
+                iconColor: TalkoraColors.iosTeal,
+                title: isAr ? 'صوت النقر التفاعلي' : 'Tactile Click Sound',
+                subtitle: isAr
+                    ? 'تشغيل صوت نقر ناعم عند الضغط على الأزرار والأيقونات'
+                    : 'Play a crisp glass-tap click sound on buttons & icons',
+                trailing: CupertinoSwitch(
+                  value: profile.clickSoundEnabled,
+                  activeTrackColor: TalkoraColors.iosGreen,
+                  onChanged: (v) {
+                    ref.read(learnerProfileProvider.notifier).setClickSoundEnabled(v);
+                    if (v) NimoSoundFx.click();
+                  },
+                ),
+              ),
+              IosSettingsRow(
+                icon: CupertinoIcons.sparkles,
+                iconColor: TalkoraColors.iosIndigo,
+                title: isAr ? 'أنيميشن الزجاج على الأيقونات' : 'Animated Liquid Glass Icons',
+                subtitle: isAr
+                    ? 'تفعيل تأثير الزجاج اللامع المتحرك على أيقونات التطبيق'
+                    : 'Enable frosted glass specular sweep animation on icons',
+                trailing: CupertinoSwitch(
+                  value: profile.glassIconAnimationEnabled,
+                  activeTrackColor: TalkoraColors.iosGreen,
+                  onChanged: (v) {
+                    NimoSoundFx.click();
+                    ref.read(learnerProfileProvider.notifier).setGlassIconAnimationEnabled(v);
+                  },
+                ),
+              ),
+              IosSettingsRow(
+                icon: CupertinoIcons.waveform_circle_fill,
+                iconColor: TalkoraColors.iosPink,
+                title: isAr ? 'ملف الصوت البشري الواقعي' : 'Realistic Human Voice Profile',
+                subtitle: RealisticTtsService.presets
+                    .firstWhere(
+                      (p) => p.id == ai.voicePresetId,
+                      orElse: () => RealisticTtsService.presets.first,
+                    )
+                    .labelAr,
+                onTap: () {
+                  showModalBottomSheet<void>(
+                    context: context,
+                    showDragHandle: true,
+                    builder: (ctx) => SafeArea(
+                      child: ListView(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        children: [
+                          Text(
+                            isAr ? 'اختر الصوت البشري الواقعي' : 'Select Realistic Human Voice',
+                            style: theme.textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 8),
+                          ...RealisticTtsService.presets.map((p) {
+                            final sel = ai.voicePresetId == p.id;
+                            return ListTile(
+                              leading: IosIconBadge(
+                                icon: CupertinoIcons.waveform,
+                                color: sel ? TalkoraColors.iosGreen : TalkoraColors.iosBlue,
+                              ),
+                              title: Text(isAr ? p.labelAr : p.labelEn),
+                              trailing: sel
+                                  ? const Icon(CupertinoIcons.checkmark_alt, color: TalkoraColors.iosGreen)
+                                  : null,
+                              onTap: () {
+                                NimoSoundFx.click();
+                                ref.read(aiSettingsProvider.notifier).updateAdvanced(voicePresetId: p.id);
+                                Navigator.pop(ctx);
+                              },
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+
           // Developer Info Section (YOSSEF JOO — WhatsApp 01029892573)
           IosGroupedSection(
             header: isAr ? 'بيانات المطور والدعم الفني' : 'DEVELOPER & SUPPORT',
@@ -665,8 +754,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               const SizedBox(height: 2),
                               Text(
                                 isAr
-                                    ? 'مطور تطبيق LISORA AI v3.0 Enterprise'
-                                    : 'Creator & Lead Developer — LISORA AI v3.0',
+                                    ? 'مطور تطبيق Nimo v4.0 Ultra'
+                                    : 'Creator & Lead Developer — Nimo v4.0 Ultra',
                                 style: theme.textTheme.bodySmall,
                               ),
                               const SizedBox(height: 4),
@@ -690,7 +779,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             style: FilledButton.styleFrom(backgroundColor: TalkoraColors.iosGreen),
                             onPressed: () => bridge.openWhatsApp(
                               phone: _devWhatsApp,
-                              message: 'مرحباً مهندس $_devName، أتواصل معك بخصوص تطبيق LISORA AI v3.0',
+                              message: 'مرحباً مهندس $_devName، أتواصل معك بخصوص تطبيق Nimo v4.0 Ultra',
                             ),
                             icon: const Icon(CupertinoIcons.chat_bubble_fill, size: 18),
                             label: Text(isAr ? 'تواصل واتساب مباشر' : 'WhatsApp'),

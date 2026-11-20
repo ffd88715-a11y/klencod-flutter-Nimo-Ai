@@ -3,15 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:talkora_ai/app/theme/app_theme.dart';
+import 'package:talkora_ai/core/ai/image_gen_service.dart';
+import 'package:talkora_ai/core/audio/sound_fx_service.dart';
 import 'package:talkora_ai/core/audio/voice_socket_service.dart';
 import 'package:talkora_ai/core/device/native_bridge_service.dart';
 import 'package:talkora_ai/core/knowledge/github_knowledge_service.dart';
+import 'package:talkora_ai/core/knowledge/nimo_local_db_service.dart';
 import 'package:talkora_ai/core/storage/app_state_provider.dart';
 import 'package:talkora_ai/core/widgets/ios_components.dart';
 import 'package:talkora_ai/core/widgets/talkora_waveform.dart';
 
-/// LISORA AI v3.0 — Enterprise Home Hub with Live Voice, Image Studio,
-/// GitHub Mega-Datasets, Full Phone Control & YOSSEF JOO Branding.
+/// Nimo v4.0 Ultra — Supercharged Home Hub with Animated Liquid Glass Icons,
+/// Realistic Human Voice, Coding Lab Pro, 4,300+ Offline DB, Key-Based Image Studio & YOSSEF JOO Branding.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -20,26 +23,27 @@ class HomeScreen extends ConsumerWidget {
     final profile = ref.watch(learnerProfileProvider);
     final ai = ref.watch(aiSettingsProvider);
     final gh = ref.watch(githubKnowledgeProvider);
+    final localDb = ref.watch(nimoLocalDbProvider);
     final s = ref.watch(appStringsProvider);
     final isAr = s.isArabic;
     final theme = Theme.of(context);
+    final totalKnowledge = localDb.totalRecords + gh.totalEntries;
     final progressRatio = (profile.speakingMinutesToday / profile.dailyTargetMinutes).clamp(0.0, 1.0);
+    final imgRoute = ImageGenService.describeActiveKeyRoute(ai, isAr: isAr);
 
     return Scaffold(
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
           children: [
-            // Top Bar + Active AI Model Pill
+            // Top Bar + Active 2026 AI Model Pill
             Row(
               children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.14),
-                  child: Text(
-                    profile.displayName.isNotEmpty ? profile.displayName[0].toUpperCase() : 'L',
-                    style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.primary),
-                  ),
+                IosIconBadge(
+                  icon: CupertinoIcons.sparkles,
+                  color: theme.colorScheme.primary,
+                  size: 44,
+                  animatedGlass: profile.glassIconAnimationEnabled,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -47,8 +51,10 @@ class HomeScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isAr ? 'أهلاً، ${profile.displayName}' : 'Hello, ${profile.displayName}',
-                        style: theme.textTheme.headlineSmall,
+                        isAr ? 'Nimo • أهلاً ${profile.displayName}' : 'Nimo • Hi ${profile.displayName}',
+                        style: theme.textTheme.headlineSmall?.copyWith(fontSize: 19.5),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 3),
                       IosStatusPill(
@@ -59,20 +65,24 @@ class HomeScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: isAr ? 'مفاتيح API والإعدادات' : 'API Keys & Settings',
-                  icon: const Icon(CupertinoIcons.gear_alt_fill),
-                  onPressed: () => context.push('/settings'),
+                NimoGlassTap(
+                  onTap: () => context.push('/settings'),
+                  child: IosIconBadge(
+                    icon: CupertinoIcons.gear_alt_fill,
+                    color: TalkoraColors.iosIndigo,
+                    size: 38,
+                    animatedGlass: profile.glassIconAnimationEnabled,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 18),
 
-            // Live Voice + AI Studio Hero Card
+            // Realistic Human Voice + Nimo Studio Hero Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
+                borderRadius: BorderRadius.circular(24),
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -81,30 +91,31 @@ class HomeScreen extends ConsumerWidget {
                     TalkoraColors.iosIndigo,
                   ],
                 ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 0.9),
               ),
               child: Column(
                 children: [
-                  GestureDetector(
+                  NimoGlassTap(
                     onTap: () => context.push('/voice'),
                     child: const TalkoraVoiceOrb(
                       state: VoiceEngineState.listening,
-                      audioLevel: 0.25,
+                      audioLevel: 0.26,
                       size: 92,
                     ),
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    isAr ? 'المحادثة الصوتية اللايف جاهزة الآن' : 'Live Voice AI Ready',
+                    isAr ? 'تحدث مع Nimo بصوت بشري طبيعي' : 'Talk to Nimo with Realistic Voice',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.titleLarge?.copyWith(color: Colors.white),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     isAr
-                        ? 'تحدث بالعربية أو الإنجليزية — تحكم بهاتفك، اسأل قواعد GitHub، وولّد الصور بالصوت'
-                        : 'Speak Arabic or English — control your phone, query GitHub DBs & generate art',
+                        ? 'مرتبط بـ $totalKnowledge سجل معرفي ذكي + أحدث موديلات 2026 + تحكم كامل بالهاتف'
+                        : 'Powered by $totalKnowledge knowledge records + 2026 AI models + phone control',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.88)),
+                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.9)),
                   ),
                   const SizedBox(height: 14),
                   Row(
@@ -115,10 +126,13 @@ class HomeScreen extends ConsumerWidget {
                             backgroundColor: Colors.white,
                             foregroundColor: theme.colorScheme.primary,
                           ),
-                          onPressed: () => context.push('/voice'),
+                          onPressed: () {
+                            NimoSoundFx.click();
+                            context.push('/voice');
+                          },
                           icon: const Icon(CupertinoIcons.mic_fill, size: 18),
                           label: Text(
-                            isAr ? 'صوت لايف مباشر' : 'Live Voice',
+                            isAr ? 'صوت بشري لايف' : 'Human Voice',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -128,13 +142,16 @@ class HomeScreen extends ConsumerWidget {
                       Expanded(
                         child: FilledButton.icon(
                           style: FilledButton.styleFrom(
-                            backgroundColor: Colors.white.withValues(alpha: 0.18),
+                            backgroundColor: Colors.white.withValues(alpha: 0.20),
                             foregroundColor: Colors.white,
                           ),
-                          onPressed: () => context.go('/chat'),
+                          onPressed: () {
+                            NimoSoundFx.click();
+                            context.go('/chat');
+                          },
                           icon: const Icon(CupertinoIcons.sparkles, size: 18),
                           label: Text(
-                            isAr ? 'استوديو AI' : 'AI Studio',
+                            isAr ? 'محادثة Nimo' : 'Nimo Chat',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -147,71 +164,92 @@ class HomeScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 18),
 
-            // LISORA v3.0 Super Suite Grid (8 Power Modules)
-            Text(isAr ? 'قدرات LISORA AI v3.0 العملاقة' : 'LISORA AI v3.0 Super Suite',
-                style: theme.textTheme.titleLarge),
+            // Nimo v4.0 Ultra Super Suite Grid (8 Power Modules with Liquid Glass Icons)
+            Text(
+              isAr ? 'قدرات Nimo v4.0 Ultra العملاقة' : 'Nimo v4.0 Ultra Super Suite',
+              style: theme.textTheme.titleLarge,
+            ),
             const SizedBox(height: 12),
             GridView.count(
               crossAxisCount: 2,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 1.38,
+              childAspectRatio: 1.32,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               children: [
                 _IosFeatureTile(
+                  icon: CupertinoIcons.chevron_left_slash_chevron_right,
+                  color: TalkoraColors.iosTeal,
+                  title: isAr ? 'مختبر البرمجة Pro' : 'Coding Lab Pro',
+                  subtitle: isAr ? 'تلوين + نسخ + ذكاء AI' : 'Syntax + Copy + AI',
+                  animatedGlass: profile.glassIconAnimationEnabled,
+                  onTap: () => context.push('/coding-lab'),
+                ),
+                _IosFeatureTile(
                   icon: CupertinoIcons.photo_fill_on_rectangle_fill,
                   color: TalkoraColors.iosPink,
-                  title: isAr ? 'استوديو توليد الصور' : 'AI Image Studio',
-                  subtitle: isAr ? 'Flux مجاني + DALL-E 3' : 'Free Flux + DALL-E 3',
+                  title: isAr ? 'مولد الصور الذكي' : 'AI Image Studio',
+                  subtitle: imgRoute,
+                  animatedGlass: profile.glassIconAnimationEnabled,
                   onTap: () => context.push('/image-studio'),
                 ),
                 _IosFeatureTile(
                   icon: CupertinoIcons.layers_alt_fill,
                   color: TalkoraColors.iosIndigo,
-                  title: isAr ? 'قواعد بيانات GitHub' : 'GitHub Mega-DB',
-                  subtitle: isAr
-                      ? '${gh.totalEntries} سجل • بحث RAG'
-                      : '${gh.totalEntries} records • RAG',
+                  title: isAr ? 'قواعد بيانات Nimo' : 'Nimo Mega-DB',
+                  subtitle: isAr ? '$totalKnowledge سجل فوري' : '$totalKnowledge fast records',
+                  animatedGlass: profile.glassIconAnimationEnabled,
                   onTap: () => context.push('/github-db'),
+                ),
+                _IosFeatureTile(
+                  icon: CupertinoIcons.lock_shield_fill,
+                  color: TalkoraColors.iosBlue,
+                  title: isAr ? 'موديلات 2026 والمفاتيح' : '2026 Models & Keys',
+                  subtitle: isAr ? 'GPT-6.2 / Gemini 3.8 / Claude 5' : 'GPT-6.2 • Gemini 3.8',
+                  animatedGlass: profile.glassIconAnimationEnabled,
+                  onTap: () => context.push('/settings'),
                 ),
                 _IosFeatureTile(
                   icon: CupertinoIcons.device_phone_portrait,
                   color: TalkoraColors.iosGreen,
                   title: isAr ? 'إدارة الهاتف والتطبيقات' : 'Phone Manager',
                   subtitle: isAr ? 'فتح التطبيقات والأوامر' : 'Apps, Torch & System',
+                  animatedGlass: profile.glassIconAnimationEnabled,
                   onTap: () => context.push('/device-hub'),
                 ),
                 _IosFeatureTile(
-                  icon: CupertinoIcons.lock_shield_fill,
-                  color: TalkoraColors.iosBlue,
-                  title: isAr ? 'مفاتيح AI والشرح' : 'AI Keys & Guide',
-                  subtitle: isAr ? '12 مزود + تحويل ذكي' : '12 Providers + Guide',
-                  onTap: () => context.push('/settings'),
+                  icon: CupertinoIcons.globe,
+                  color: TalkoraColors.iosOrange,
+                  title: s.t('translator'),
+                  subtitle: isAr ? 'ترجمة وتعبيرات أصلية' : 'Idioms & Examples',
+                  animatedGlass: profile.glassIconAnimationEnabled,
+                  onTap: () => context.push('/translator'),
                 ),
                 _IosFeatureTile(
                   icon: CupertinoIcons.person_2_fill,
                   color: TalkoraColors.iosPurple,
                   title: s.t('roleplay'),
                   subtitle: isAr ? '8 مواقف واقعية' : '8 Real Scenarios',
+                  animatedGlass: profile.glassIconAnimationEnabled,
                   onTap: () => context.push('/roleplay'),
                 ),
                 _IosFeatureTile(
-                  icon: CupertinoIcons.globe,
-                  color: TalkoraColors.iosTeal,
-                  title: s.t('translator'),
-                  subtitle: isAr ? 'ترجمة وتعبيرات أصلية' : 'Idioms & Examples',
-                  onTap: () => context.push('/translator'),
+                  icon: CupertinoIcons.book_fill,
+                  color: TalkoraColors.iosRed,
+                  title: isAr ? 'التدريب والمفردات' : 'Practice & Vocab',
+                  subtitle: isAr ? 'نطق وقواعد وتحديات' : 'Grammar & Challenges',
+                  animatedGlass: profile.glassIconAnimationEnabled,
+                  onTap: () => context.push('/practice-hub'),
                 ),
               ],
             ),
             const SizedBox(height: 18),
 
             // Compact Progress Card
-            Card(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () => context.push('/progress'),
+            NimoGlassTap(
+              onTap: () => context.push('/progress'),
+              child: Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -220,7 +258,8 @@ class HomeScreen extends ConsumerWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(isAr ? 'تقدمك اليومي' : 'Daily Progress', style: theme.textTheme.titleMedium),
+                          Text(isAr ? 'تقدمك اليومي في Nimo' : 'Nimo Daily Progress',
+                              style: theme.textTheme.titleMedium),
                           Text(
                             '${profile.speakingMinutesToday} / ${profile.dailyTargetMinutes} ${isAr ? 'د' : 'min'}',
                             style: theme.textTheme.bodyMedium?.copyWith(
@@ -239,8 +278,8 @@ class HomeScreen extends ConsumerWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
+                          _BentoStat(label: isAr ? 'السجلات' : 'Records', value: '$totalKnowledge'),
                           _BentoStat(label: isAr ? 'المستوى' : 'Level', value: profile.englishLevel),
-                          _BentoStat(label: isAr ? 'المفردات' : 'Words', value: '${profile.vocabularyLearned}'),
                           _BentoStat(label: isAr ? 'السلسلة' : 'Streak', value: '${profile.streakDays}d'),
                           _BentoStat(label: 'XP', value: '${profile.xpPoints}'),
                         ],
@@ -253,22 +292,25 @@ class HomeScreen extends ConsumerWidget {
             const SizedBox(height: 16),
 
             // Developer Contact Banner (YOSSEF JOO • WhatsApp 01029892573)
-            Card(
-              child: ListTile(
-                leading: const IosIconBadge(
-                  icon: CupertinoIcons.chat_bubble_fill,
-                  color: TalkoraColors.iosGreen,
-                  size: 38,
+            NimoGlassTap(
+              onTap: () => ref.read(nativeBridgeProvider).openWhatsApp(
+                    phone: '01029892573',
+                    message: 'مرحباً مهندس YOSSEF JOO، أتواصل معك من داخل تطبيق Nimo v4.0 Ultra',
+                  ),
+              child: Card(
+                child: ListTile(
+                  leading: IosIconBadge(
+                    icon: CupertinoIcons.chat_bubble_fill,
+                    color: TalkoraColors.iosGreen,
+                    size: 38,
+                    animatedGlass: profile.glassIconAnimationEnabled,
+                  ),
+                  title: const Text('YOSSEF JOO', style: TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text(
+                    isAr ? 'مطور Nimo • واتساب: 01029892573' : 'Nimo Developer • WhatsApp: 01029892573',
+                  ),
+                  trailing: const Icon(CupertinoIcons.arrow_up_right_circle_fill, color: TalkoraColors.iosGreen),
                 ),
-                title: const Text('YOSSEF JOO', style: TextStyle(fontWeight: FontWeight.w700)),
-                subtitle: Text(
-                  isAr ? 'مطور التطبيق • واتساب: 01029892573' : 'Developer • WhatsApp: 01029892573',
-                ),
-                trailing: Icon(CupertinoIcons.arrow_up_right_circle_fill, color: TalkoraColors.iosGreen),
-                onTap: () => ref.read(nativeBridgeProvider).openWhatsApp(
-                      phone: '01029892573',
-                      message: 'مرحباً مهندس YOSSEF JOO، أتواصل معك من داخل تطبيق LISORA AI v3.0',
-                    ),
               ),
             ),
           ],
@@ -301,6 +343,7 @@ class _IosFeatureTile extends StatelessWidget {
   final Color color;
   final String title;
   final String subtitle;
+  final bool animatedGlass;
   final VoidCallback onTap;
 
   const _IosFeatureTile({
@@ -308,34 +351,38 @@ class _IosFeatureTile extends StatelessWidget {
     required this.color,
     required this.title,
     required this.subtitle,
+    required this.animatedGlass,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
+    return NimoGlassTap(
+      onTap: onTap,
+      child: Card(
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IosIconBadge(icon: icon, color: color, size: 34),
+              IosIconBadge(icon: icon, color: color, size: 36, animatedGlass: animatedGlass),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: theme.textTheme.titleMedium?.copyWith(fontSize: 14.2),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                  Text(subtitle,
-                      style: theme.textTheme.bodySmall,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
+                  Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(fontSize: 14.2),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    subtitle,
+                    style: theme.textTheme.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ],

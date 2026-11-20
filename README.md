@@ -1,6 +1,6 @@
-# TALKORA AI — Complete Delivery Report, Installation Guide, License Audit & Test Report
+# Nimo — Complete Delivery Report, Installation Guide, License Audit & Test Report
 
-**TALKORA AI** is a complete Android-first Flutter English-learning application paired with a self-hosted Python FastAPI real-time voice conversation backend, PostgreSQL schema, Qdrant vector retrieval layer, Redis/Docker configuration, model setup CLI, and license-gated dataset ingestion pipeline.
+**Nimo** is a complete Android-first Flutter English-learning application paired with a self-hosted Python FastAPI real-time voice conversation backend, PostgreSQL schema, Qdrant vector retrieval layer, Redis/Docker configuration, model setup CLI, and license-gated dataset ingestion pipeline.
 
 ---
 

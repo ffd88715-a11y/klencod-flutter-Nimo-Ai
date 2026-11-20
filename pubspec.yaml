@@ -1,7 +1,7 @@
 name: talkora_ai
-description: LISORA AI v3.0 (YOSSEF JOO Edition) — Live Voice AI, GitHub Mega-Datasets RAG, Image Studio & Full Phone Management.
+description: Nimo v4.0 Ultra Edition (YOSSEF JOO Edition) — Liquid Glass UI, Realistic Human Voice AI, Key-Based Image Studio, Coding Lab Pro, 4,300+ Offline Knowledge DB & Latest 2026 AI Models.
 publish_to: "none"
-version: 3.0.0+3
+version: 4.0.0+4
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -32,3 +32,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/audio/
+    - assets/db/

@@ -1,17 +1,22 @@
 import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:talkora_ai/app/theme/app_theme.dart';
 import 'package:talkora_ai/core/ai/ai_provider_models.dart';
 import 'package:talkora_ai/core/ai/ai_tool_executor.dart';
+import 'package:talkora_ai/core/audio/realistic_tts_service.dart';
+import 'package:talkora_ai/core/audio/sound_fx_service.dart';
 import 'package:talkora_ai/core/device/native_bridge_service.dart';
 import 'package:talkora_ai/core/knowledge/github_knowledge_service.dart';
+import 'package:talkora_ai/core/knowledge/nimo_local_db_service.dart';
 import 'package:talkora_ai/core/storage/app_state_provider.dart';
 import 'package:talkora_ai/core/widgets/ios_components.dart';
+import 'package:talkora_ai/core/widgets/nimo_chat_bubble.dart';
+import 'package:talkora_ai/core/widgets/nimo_clipboard_bar.dart';
+import 'package:talkora_ai/features/coding_lab/coding_lab_screen.dart';
 
 class _TutorPersona {
   final String id;
@@ -31,8 +36,8 @@ class _TutorPersona {
   });
 }
 
-/// LISORA AI v3.0 — Supercharged AI Chat Studio with GitHub RAG, Phone Control,
-/// Inline Image Generation, Deep Thinking, Read-Aloud TTS & 8 Specialist Personas.
+/// Nimo v4.0 Ultra — Supercharged AI Chat Studio with NimoChatBubble, One-Tap Copy/Paste,
+/// Coding Lab Handoff, Realistic Human Voice TTS, 4,300+ Offline DB + GitHub RAG & Phone Control.
 class AiChatScreen extends ConsumerStatefulWidget {
   const AiChatScreen({super.key});
 
@@ -41,26 +46,17 @@ class AiChatScreen extends ConsumerStatefulWidget {
 }
 
 class _AiChatScreenState extends ConsumerState<AiChatScreen> {
-  static const _kHistoryKey = 'talkora_ai_chat_history_v2';
+  static const _kHistoryKey = 'nimo_ai_chat_history_v4';
 
   static const List<_TutorPersona> _personas = [
     _TutorPersona(
       id: 'general',
-      nameEn: 'Super AI',
-      nameAr: 'الذكاء الخارق',
+      nameEn: 'Nimo Ultra',
+      nameAr: 'نيمو الخارق',
       icon: CupertinoIcons.sparkles,
       color: TalkoraColors.iosBlue,
       prompt:
-          'You are LISORA Super AI v3.0 developed by YOSSEF JOO. You are an ultra-intelligent, accurate, helpful assistant. Answer deeply and clearly in the user language (Arabic or English).',
-    ),
-    _TutorPersona(
-      id: 'commander',
-      nameEn: 'Phone Commander',
-      nameAr: 'مدير الهاتف',
-      icon: CupertinoIcons.device_phone_portrait,
-      color: TalkoraColors.iosGreen,
-      prompt:
-          'You are LISORA Phone Commander. Help the user manage their Android phone, open apps, send WhatsApp, set alarms/timers, control flashlight, navigate Maps, and search YouTube.',
+          'You are Nimo v4.0 Ultra developed by YOSSEF JOO. You are an ultra-intelligent, fast, accurate assistant. Answer deeply and clearly in the user language (Arabic or English). Format code in fenced code blocks.',
     ),
     _TutorPersona(
       id: 'coder',
@@ -69,7 +65,16 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       icon: CupertinoIcons.chevron_left_slash_chevron_right,
       color: TalkoraColors.iosIndigo,
       prompt:
-          'You are a Principal Software Architect (Flutter, Dart, Python, Kotlin, Web, AI). Write clean, production-ready code with clear explanations.',
+          'You are Nimo Principal Software Architect (Flutter, Dart, Python, Kotlin, JS/TS, SQL, Web, AI). Write clean, complete, copy-ready code inside fenced code blocks with clear explanations.',
+    ),
+    _TutorPersona(
+      id: 'commander',
+      nameEn: 'Phone Commander',
+      nameAr: 'مدير الهاتف',
+      icon: CupertinoIcons.device_phone_portrait,
+      color: TalkoraColors.iosGreen,
+      prompt:
+          'You are Nimo Phone Commander. Help the user manage their Android phone, open apps, send WhatsApp, set alarms/timers, control flashlight, navigate Maps, and search YouTube.',
     ),
     _TutorPersona(
       id: 'coach',
@@ -78,7 +83,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       icon: CupertinoIcons.chat_bubble_2_fill,
       color: TalkoraColors.iosTeal,
       prompt:
-          'You are LISORA AI English Coach. Reply naturally in English, gently correct any grammar mistake, and include a concise Arabic translation when helpful.',
+          'You are Nimo English Coach. Reply naturally in English, gently correct any grammar mistake, and include a concise Arabic translation when helpful.',
     ),
     _TutorPersona(
       id: 'ielts',
@@ -99,22 +104,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           'You are an executive business strategist, marketing director, and startup advisor. Provide actionable, sharp strategies.',
     ),
     _TutorPersona(
-      id: 'grammar',
-      nameEn: 'Grammar Surgeon',
-      nameAr: 'خبير القواعد',
-      icon: CupertinoIcons.doc_text_search,
-      color: TalkoraColors.iosPink,
-      prompt:
-          'You are an expert English grammar teacher for Arabic speakers. Explain grammar rules clearly with bilingual Arabic/English examples.',
-    ),
-    _TutorPersona(
       id: 'creative',
       nameEn: 'Creative Studio',
       nameAr: 'كاتب ومبدع',
       icon: CupertinoIcons.paintbrush_fill,
       color: TalkoraColors.iosRed,
       prompt:
-          'You are a master creative writer, storyteller, and prompt designer. Craft vivid stories, scripts, and image prompts.',
+          'You are a master creative writer, storyteller, and AI image prompt designer. Craft vivid stories, scripts, and image prompts.',
     ),
   ];
 
@@ -161,7 +157,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   Future<void> _saveHistory() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final trimmed = _messages.length > 50 ? _messages.sublist(_messages.length - 50) : _messages;
+      final trimmed = _messages.length > 60 ? _messages.sublist(_messages.length - 60) : _messages;
       await prefs.setString(_kHistoryKey, jsonEncode(trimmed.map((m) => m.toJson()).toList()));
     } catch (_) {}
   }
@@ -171,7 +167,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       if (_scrollCtrl.hasClients) {
         _scrollCtrl.animateTo(
           _scrollCtrl.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 260),
+          duration: const Duration(milliseconds: 240),
           curve: Curves.easeOut,
         );
       }
@@ -182,6 +178,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     final text = (presetText ?? _inputCtrl.text).trim();
     if (text.isEmpty || _isSending) return;
 
+    NimoSoundFx.pop();
     _inputCtrl.clear();
     final userMsg = AiChatMessage(role: 'user', content: text, timestamp: DateTime.now());
     setState(() {
@@ -206,7 +203,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
               role: 'assistant',
               content: instant.cleanReply,
               timestamp: DateTime.now(),
-              modelUsed: 'LISORA Instant Engine',
+              modelUsed: 'Nimo Instant Engine',
               actionBadge: instant.actionBadge,
               imageUrl: instant.generatedImageUrl,
             ),
@@ -219,8 +216,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       }
     }
 
-    // 2. Build GitHub RAG context + Device Control instructions
-    final ragContext = ref.read(githubKnowledgeProvider.notifier).buildRagContext(text);
+    // 2. Build combined RAG context from Nimo 4,300+ Offline DB + GitHub Datasets
+    final localRag = ref.read(nimoLocalDbProvider.notifier).buildOfflineRagContext(text, limit: 4);
+    final ghRag = ref.read(githubKnowledgeProvider.notifier).buildRagContext(text);
+    final combinedRag = '$localRag$ghRag';
+
     final sysPrompt = StringBuffer(_activePersona.prompt);
     if (aiSettings.deviceControlEnabled) {
       sysPrompt.writeln('\n${AiToolExecutor.systemToolPrompt}');
@@ -231,7 +231,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       settings: aiSettings,
       messages: recentContext,
       systemPromptOverride: sysPrompt.toString(),
-      ragContext: ragContext,
+      ragContext: combinedRag,
     );
 
     if (!mounted) return;
@@ -239,23 +239,41 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     String replyText;
     String? actionBadge;
     String? imageUrl;
+    String? modelBadge;
 
     if (result.success) {
       final outcome = aiSettings.deviceControlEnabled
           ? await executor.executeAiTags(result.text, isArabic: isAr)
           : ToolExecutionOutcome(cleanReply: result.text);
       replyText = outcome.cleanReply;
-      actionBadge = outcome.actionBadge;
+      actionBadge = outcome.actionBadge ?? (localRag.isNotEmpty ? (isAr ? 'مدعوم بقاعدة Nimo' : 'Nimo DB RAG') : null);
       imageUrl = outcome.generatedImageUrl;
+      modelBadge = '${result.providerName} • ${result.modelName}';
       ref.read(learnerProfileProvider.notifier).addXp(10);
-    } else if (result.error == 'MISSING_API_KEY') {
-      replyText = isAr
-          ? 'لم تقم بإضافة مفتاح API لـ ${aiSettings.activePreset.name} بعد. يمكنك تفعيل "الاتصال الذكي التلقائي" أو اختيار LISORA Free Cloud AI من الإعدادات للعمل مجاناً فوراً!'
-          : 'No API key for ${aiSettings.activePreset.name}. Enable Smart Fallback or pick LISORA Free Cloud AI in Settings!';
     } else {
-      replyText = isAr
-          ? 'تعذّر الاتصال بالنموذج (${result.providerName}):\n${result.error}'
-          : 'Could not reach ${result.providerName}:\n${result.error}';
+      // Offline intelligence fallback: answer directly from the 4,300+ local Nimo DB!
+      final offlineHits = ref.read(nimoLocalDbProvider.notifier).search(text, limit: 4);
+      if (offlineHits.isNotEmpty) {
+        final buf = StringBuffer(
+          isAr
+              ? 'إجابة فورية من قاعدة بيانات Nimo المحلية (${ref.read(nimoLocalDbProvider).totalRecords} سجل):\n\n'
+              : 'Instant answer from Nimo Offline Mega-DB:\n\n',
+        );
+        for (final h in offlineHits) {
+          buf.writeln('**${h.title}**\n${h.body}\n');
+        }
+        replyText = buf.toString().trim();
+        actionBadge = isAr ? 'ذكاء محلي فوري (أوفلاين)' : 'Instant Offline DB';
+        modelBadge = 'Nimo Local Engine';
+      } else if (result.error == 'MISSING_API_KEY') {
+        replyText = isAr
+            ? 'لم تقم بإضافة مفتاح API لـ ${aiSettings.activePreset.name} بعد. يمكنك تفعيل "التحويل الذكي التلقائي" أو اختيار Nimo Free Cloud AI من الإعدادات للعمل مجاناً فوراً!'
+            : 'No API key for ${aiSettings.activePreset.name}. Enable Smart Fallback or pick Nimo Free Cloud AI in Settings!';
+      } else {
+        replyText = isAr
+            ? 'تعذّر الاتصال بالنموذج (${result.providerName}):\n${result.error}'
+            : 'Could not reach ${result.providerName}:\n${result.error}';
+      }
     }
 
     setState(() {
@@ -264,7 +282,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           role: 'assistant',
           content: replyText,
           timestamp: DateTime.now(),
-          modelUsed: result.success ? '${result.providerName} • ${result.modelName}' : null,
+          modelUsed: modelBadge,
           actionBadge: actionBadge,
           imageUrl: imageUrl,
         ),
@@ -275,16 +293,33 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     _scrollToBottom();
   }
 
+  void _regenerateAt(int assistantIdx) {
+    if (_isSending || assistantIdx <= 0) return;
+    // Find preceding user message
+    for (int i = assistantIdx - 1; i >= 0; i--) {
+      if (_messages[i].role == 'user') {
+        final prompt = _messages[i].content;
+        setState(() {
+          _messages.removeRange(i, _messages.length);
+        });
+        _sendMessage(prompt);
+        return;
+      }
+    }
+  }
+
   void _exportChat() {
     if (_messages.isEmpty) return;
-    final buf = StringBuffer('=== LISORA AI v3.0 Chat Export ===\n\n');
+    NimoSoundFx.click();
+    final buf = StringBuffer('=== Nimo v4.0 Ultra Chat Export ===\n\n');
     for (final m in _messages) {
-      buf.writeln('${m.role == 'user' ? 'User' : 'LISORA AI'}: ${m.content}\n');
+      buf.writeln('${m.role == 'user' ? 'User' : 'Nimo'}: ${m.content}\n');
     }
-    ref.read(nativeBridgeProvider).shareText(buf.toString(), subject: 'LISORA AI Conversation');
+    ref.read(nativeBridgeProvider).shareText(buf.toString(), subject: 'Nimo Conversation');
   }
 
   void _showQuickModelSwitcher() {
+    NimoSoundFx.click();
     final ai = ref.read(aiSettingsProvider);
     final isAr = ref.read(learnerProfileProvider).uiLocale == 'ar';
 
@@ -304,11 +339,12 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    isAr ? 'التبديل السريع بين نماذج AI' : 'Quick Switch AI Model',
+                    isAr ? 'أحدث موديلات 2026 — تبديل سريع' : 'Latest 2026 AI Models',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   TextButton(
                     onPressed: () {
+                      NimoSoundFx.click();
                       Navigator.pop(ctx);
                       context.push('/settings');
                     },
@@ -341,6 +377,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                     ],
                   ),
                   onTap: () {
+                    NimoSoundFx.click();
                     ref.read(aiSettingsProvider.notifier).selectProvider(p.id);
                     Navigator.pop(ctx);
                   },
@@ -357,10 +394,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   Widget build(BuildContext context) {
     final ai = ref.watch(aiSettingsProvider);
     final gh = ref.watch(githubKnowledgeProvider);
+    final localDb = ref.watch(nimoLocalDbProvider);
     final isAr = ref.watch(learnerProfileProvider).uiLocale == 'ar';
-    final bridge = ref.read(nativeBridgeProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final totalRecords = localDb.totalRecords + gh.totalEntries;
 
     return Scaffold(
       appBar: AppBar(
@@ -368,7 +406,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           onTap: _showQuickModelSwitcher,
           child: Column(
             children: [
-              Text(isAr ? 'استوديو LISORA AI' : 'LISORA AI Studio', style: theme.textTheme.titleMedium),
+              Text(isAr ? 'محادثة Nimo الذكية' : 'Nimo AI Studio', style: theme.textTheme.titleMedium),
               const SizedBox(height: 2),
               IosStatusPill(
                 label: '${ai.activePreset.shortName} • ${ai.activeModel}',
@@ -387,6 +425,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
             tooltip: isAr ? 'مسح المحادثة' : 'Clear Chat',
             icon: const Icon(CupertinoIcons.trash, size: 20),
             onPressed: () {
+              NimoSoundFx.click();
               setState(() => _messages.clear());
               _saveHistory();
             },
@@ -394,7 +433,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           IconButton(
             tooltip: isAr ? 'إعدادات API' : 'API Settings',
             icon: const Icon(CupertinoIcons.slider_horizontal_3, size: 20),
-            onPressed: () => context.push('/settings'),
+            onPressed: () {
+              NimoSoundFx.click();
+              context.push('/settings');
+            },
           ),
         ],
       ),
@@ -421,13 +463,16 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                     fontWeight: FontWeight.w600,
                     color: selected ? Colors.white : null,
                   ),
-                  onSelected: (_) => setState(() => _personaId = p.id),
+                  onSelected: (_) {
+                    NimoSoundFx.click();
+                    setState(() => _personaId = p.id);
+                  },
                 );
               },
             ),
           ),
 
-          // Power Feature Toggles Strip (Deep Think + GitHub RAG + Phone Control)
+          // Power Feature Toggles Strip
           SizedBox(
             height: 38,
             child: ListView(
@@ -437,46 +482,57 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 FilterChip(
                   label: Text(isAr ? 'تفكير عميق' : 'Deep Think', style: const TextStyle(fontSize: 11.5)),
                   selected: ai.deepThinkingEnabled,
-                  onSelected: (v) =>
-                      ref.read(aiSettingsProvider.notifier).updateAdvanced(deepThinkingEnabled: v),
+                  onSelected: (v) {
+                    NimoSoundFx.click();
+                    ref.read(aiSettingsProvider.notifier).updateAdvanced(deepThinkingEnabled: v);
+                  },
                 ),
                 const SizedBox(width: 6),
                 FilterChip(
                   label: Text(
-                    isAr ? 'بيانات GitHub (${gh.totalEntries})' : 'GitHub DB (${gh.totalEntries})',
+                    isAr ? 'قاعدة Nimo ($totalRecords)' : 'Nimo DB ($totalRecords)',
                     style: const TextStyle(fontSize: 11.5),
                   ),
                   selected: gh.ragEnabled,
-                  onSelected: (v) => ref.read(githubKnowledgeProvider.notifier).setRagEnabled(v),
+                  onSelected: (v) {
+                    NimoSoundFx.click();
+                    ref.read(githubKnowledgeProvider.notifier).setRagEnabled(v);
+                  },
                 ),
                 const SizedBox(width: 6),
-                FilterChip(
-                  label: Text(isAr ? 'تحكم بالهاتف' : 'Phone Control', style: const TextStyle(fontSize: 11.5)),
-                  selected: ai.deviceControlEnabled,
-                  onSelected: (v) =>
-                      ref.read(aiSettingsProvider.notifier).updateAdvanced(deviceControlEnabled: v),
+                ActionChip(
+                  avatar: const Icon(CupertinoIcons.chevron_left_slash_chevron_right, size: 14),
+                  label: Text(isAr ? 'مختبر البرمجة' : 'Code Lab', style: const TextStyle(fontSize: 11.5)),
+                  onPressed: () {
+                    NimoSoundFx.click();
+                    context.push('/coding-lab');
+                  },
                 ),
                 const SizedBox(width: 6),
                 ActionChip(
                   avatar: const Icon(CupertinoIcons.photo_fill, size: 14),
-                  label: Text(isAr ? 'توليد صور' : 'Image Studio', style: const TextStyle(fontSize: 11.5)),
-                  onPressed: () => context.push('/image-studio'),
+                  label: Text(isAr ? 'مولد الصور' : 'Image Studio', style: const TextStyle(fontSize: 11.5)),
+                  onPressed: () {
+                    NimoSoundFx.click();
+                    context.push('/image-studio');
+                  },
                 ),
               ],
             ),
           ),
 
-          // Messages List
+          // Messages List with NimoChatBubble
           Expanded(
             child: _messages.isEmpty
                 ? _EmptyStudioView(
                     persona: _activePersona,
                     isAr: isAr,
+                    totalRecords: totalRecords,
                     onQuickPrompt: _sendMessage,
                   )
                 : ListView.builder(
                     controller: _scrollCtrl,
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 16),
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
                     itemCount: _messages.length + (_isSending ? 1 : 0),
                     itemBuilder: (context, index) {
                       if (_isSending && index == _messages.length) {
@@ -489,133 +545,49 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                               color: isDark ? TalkoraColors.darkFill : TalkoraColors.lightFill,
                               borderRadius: BorderRadius.circular(18),
                             ),
-                            child: const CupertinoActivityIndicator(),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const CupertinoActivityIndicator(),
+                                const SizedBox(width: 10),
+                                Text(
+                                  isAr ? 'Nimo يفكر...' : 'Nimo is thinking...',
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       }
 
                       final msg = _messages[index];
-                      final isUser = msg.role == 'user';
-                      final bubbleColor = isUser
-                          ? theme.colorScheme.primary
-                          : (isDark ? TalkoraColors.darkSurface : TalkoraColors.lightSurface);
-                      final textColor = isUser
-                          ? Colors.white
-                          : (isDark ? TalkoraColors.darkText : TalkoraColors.lightMainText);
-
-                      return Align(
-                        alignment: isUser
-                            ? AlignmentDirectional.centerEnd
-                            : AlignmentDirectional.centerStart,
-                        child: Container(
-                          constraints: BoxConstraints(
-                            maxWidth: MediaQuery.of(context).size.width * 0.84,
-                          ),
-                          margin: const EdgeInsets.symmetric(vertical: 5),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                          decoration: BoxDecoration(
-                            color: bubbleColor,
-                            borderRadius: BorderRadius.only(
-                              topLeft: const Radius.circular(18),
-                              topRight: const Radius.circular(18),
-                              bottomLeft: Radius.circular(isUser ? 18 : 5),
-                              bottomRight: Radius.circular(isUser ? 5 : 18),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (msg.actionBadge != null) ...[
-                                IosStatusPill(
-                                  label: msg.actionBadge!,
-                                  color: TalkoraColors.iosGreen,
-                                  icon: CupertinoIcons.checkmark_seal_fill,
-                                ),
-                                const SizedBox(height: 6),
-                              ],
-                              SelectableText(
-                                msg.content,
-                                style: theme.textTheme.bodyLarge?.copyWith(
-                                  color: textColor,
-                                  fontSize: 15.2,
-                                  height: 1.42,
-                                ),
-                              ),
-                              if (msg.imageUrl != null && msg.imageUrl!.isNotEmpty) ...[
-                                const SizedBox(height: 10),
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Image.network(
-                                    msg.imageUrl!,
-                                    width: double.infinity,
-                                    fit: BoxFit.cover,
-                                    loadingBuilder: (c, child, progress) {
-                                      if (progress == null) return child;
-                                      return const SizedBox(
-                                        height: 180,
-                                        child: Center(child: CupertinoActivityIndicator()),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                              if (!isUser) ...[
-                                const SizedBox(height: 8),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (msg.modelUsed != null)
-                                      Expanded(
-                                        child: Text(
-                                          msg.modelUsed!,
-                                          style: TextStyle(
-                                            fontSize: 10.5,
-                                            color: isDark
-                                                ? TalkoraColors.darkSecondaryText
-                                                : TalkoraColors.lightSecondaryText,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    InkWell(
-                                      onTap: () => bridge.speak(msg.content),
-                                      child: const Padding(
-                                        padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        child: Icon(CupertinoIcons.volume_up, size: 16),
-                                      ),
-                                    ),
-                                    InkWell(
-                                      onTap: () {
-                                        Clipboard.setData(ClipboardData(text: msg.content));
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text(isAr ? 'تم النسخ' : 'Copied'),
-                                            duration: const Duration(seconds: 1),
-                                          ),
-                                        );
-                                      },
-                                      child: const Padding(
-                                        padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        child: Icon(CupertinoIcons.doc_on_clipboard, size: 16),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
+                      return NimoChatBubble(
+                        message: msg,
+                        isAr: isAr,
+                        onSpeak: msg.role == 'assistant'
+                            ? () => ref.read(realisticTtsProvider).speakHuman(
+                                  text: msg.content,
+                                  aiSettings: ref.read(aiSettingsProvider),
+                                )
+                            : null,
+                        onRegenerate: msg.role == 'assistant' ? () => _regenerateAt(index) : null,
+                        onShare: msg.role == 'assistant'
+                            ? () => ref.read(nativeBridgeProvider).shareText(msg.content, subject: 'Nimo')
+                            : null,
+                        onOpenInCodingLab: (code, lang) {
+                          ref.read(codingLabDraftProvider.notifier).state = (code: code, language: lang);
+                          context.push('/coding-lab');
+                        },
                       );
                     },
                   ),
           ),
 
-          // Bottom Input Bar with Live Voice Shortcut
+          // Upgraded Bottom Input Bar with One-Tap Paste + Live Human Voice + Send
           SafeArea(
             top: false,
             child: Container(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
               decoration: BoxDecoration(
                 color: isDark ? TalkoraColors.darkSurface : TalkoraColors.lightSurface,
                 border: Border(
@@ -630,21 +602,33 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   IconButton(
-                    tooltip: isAr ? 'المحادثة الصوتية اللايف' : 'Live Voice',
+                    tooltip: isAr ? 'التحدث الصوتي البشري' : 'Human Live Voice',
                     icon: Icon(CupertinoIcons.mic_circle_fill, color: theme.colorScheme.primary, size: 32),
-                    onPressed: () => context.push('/voice'),
+                    onPressed: () {
+                      NimoSoundFx.click();
+                      context.push('/voice');
+                    },
+                  ),
+                  IconButton(
+                    tooltip: isAr ? 'لصق من الحافظة' : 'Paste',
+                    icon: const Icon(CupertinoIcons.doc_on_clipboard, size: 22),
+                    onPressed: () => NimoClipboardHelper.pasteIntoController(
+                      context,
+                      _inputCtrl,
+                      isAr: isAr,
+                    ),
                   ),
                   Expanded(
                     child: TextField(
                       controller: _inputCtrl,
                       minLines: 1,
-                      maxLines: 4,
+                      maxLines: 5,
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) => _sendMessage(),
                       decoration: InputDecoration(
                         hintText: isAr
-                            ? 'اسأل أي شيء، أو اكتب: ارسم لي... / افتح واتساب...'
-                            : 'Ask anything, or try: /image ..., open WhatsApp...',
+                            ? 'اسأل Nimo أي شيء، أو الصق كوداً، أو اكتب: ارسم لي...'
+                            : 'Ask Nimo anything, paste code, or type /image ...',
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(22),
@@ -679,11 +663,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
 class _EmptyStudioView extends StatelessWidget {
   final _TutorPersona persona;
   final bool isAr;
+  final int totalRecords;
   final ValueChanged<String> onQuickPrompt;
 
   const _EmptyStudioView({
     required this.persona,
     required this.isAr,
+    required this.totalRecords,
     required this.onQuickPrompt,
   });
 
@@ -692,23 +678,23 @@ class _EmptyStudioView extends StatelessWidget {
     final theme = Theme.of(context);
     final starters = isAr
         ? [
-            'ارسم لي مدينة مستقبلية في مصر بتقنية 8K واقعية',
+            'اكتب لي كود Flutter احترافي لبطاقة زجاجية مع أنيميشن ناعم',
+            'ارسم لي مدينة مستقبلية في القاهرة بتقنية 8K واقعية',
             'افتح واتساب الآن',
-            'حالة البطارية وجهاز الهاتف',
-            'اكتب لي كود Flutter احترافي لتطبيق مهام كامل',
+            'اشرح لي أحدث موديلات الذكاء الاصطناعي في 2026',
           ]
         : [
+            'Write a clean Flutter liquid glass card widget with animation',
             '/image futuristic Cairo skyline at sunset 8k cinematic',
             'Open WhatsApp',
-            'Check battery status',
-            'Write a clean Flutter Riverpod counter & API example',
+            'Explain the latest 2026 AI models comparison',
           ];
 
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const SizedBox(height: 12),
-        Center(child: IosIconBadge(icon: persona.icon, color: persona.color, size: 58)),
+        const SizedBox(height: 10),
+        Center(child: IosIconBadge(icon: persona.icon, color: persona.color, size: 60)),
         const SizedBox(height: 12),
         Text(
           isAr ? persona.nameAr : persona.nameEn,
@@ -718,20 +704,22 @@ class _EmptyStudioView extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           isAr
-              ? 'مدعوم بقواعد بيانات GitHub العملاقة، توليد الصور، والتحكم الكامل بالهاتف'
-              : 'Powered by GitHub Mega-Datasets, AI Image Gen & Full Phone Control',
+              ? 'مدعوم بـ $totalRecords سجل معرفي فوري + أحدث موديلات 2026 + مختبر برمجة وصوت بشري'
+              : 'Powered by $totalRecords indexed records + 2026 AI models + Coding Lab & Human Voice',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium,
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 18),
         ...starters.map(
           (prompt) => Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: Card(
-              child: ListTile(
-                title: Text(prompt, style: theme.textTheme.bodyLarge?.copyWith(fontSize: 14.5)),
-                trailing: Icon(CupertinoIcons.arrow_up_circle_fill, color: theme.colorScheme.primary),
-                onTap: () => onQuickPrompt(prompt),
+            child: NimoGlassTap(
+              onTap: () => onQuickPrompt(prompt),
+              child: Card(
+                child: ListTile(
+                  title: Text(prompt, style: theme.textTheme.bodyLarge?.copyWith(fontSize: 14.5)),
+                  trailing: Icon(CupertinoIcons.arrow_up_circle_fill, color: theme.colorScheme.primary),
+                ),
               ),
             ),
           ),

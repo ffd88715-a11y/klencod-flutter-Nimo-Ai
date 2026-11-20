@@ -6,17 +6,20 @@ import 'package:go_router/go_router.dart';
 import 'package:talkora_ai/app/theme/app_theme.dart';
 import 'package:talkora_ai/core/ai/ai_provider_models.dart';
 import 'package:talkora_ai/core/ai/ai_tool_executor.dart';
+import 'package:talkora_ai/core/audio/realistic_tts_service.dart';
+import 'package:talkora_ai/core/audio/sound_fx_service.dart';
 import 'package:talkora_ai/core/audio/voice_socket_service.dart';
 import 'package:talkora_ai/core/device/native_bridge_service.dart';
 import 'package:talkora_ai/core/knowledge/github_knowledge_service.dart';
+import 'package:talkora_ai/core/knowledge/nimo_local_db_service.dart';
 import 'package:talkora_ai/core/permissions/mic_permission_service.dart';
 import 'package:talkora_ai/core/storage/app_state_provider.dart';
 import 'package:talkora_ai/core/widgets/ios_components.dart';
 import 'package:talkora_ai/core/widgets/talkora_waveform.dart';
 
-/// LISORA AI v3.0 — Real-Time Live Voice Conversation Engine.
-/// Powered by Native Android SpeechRecognizer + TextToSpeech + Universal Smart AI +
-/// GitHub RAG + Phone Control + Hands-Free Continuous Loop + Instant Barge-In.
+/// Nimo v4.0 Ultra — Realistic Human Voice Conversation Engine.
+/// Routes speech to OpenAI HD Human Voices (`gpt-4o-mini-tts` / `tts-1-hd`), ElevenLabs Ultra-Human,
+/// or highest-quality Android Neural/Wavenet voice with natural prosody + 4,300+ Offline DB RAG.
 class LiveVoiceScreen extends ConsumerStatefulWidget {
   const LiveVoiceScreen({super.key});
 
@@ -40,6 +43,7 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
   bool _autoLoop = true;
   String _voiceLocale = 'ar-EG';
   double _speechRate = 1.0;
+  String _activeVoiceEngineLabel = '';
 
   String _livePartialTranscript = '';
   String _statusNote = '';
@@ -84,14 +88,10 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
           }
           break;
         case 'partial':
-          setState(() {
-            _livePartialTranscript = event.text;
-          });
+          setState(() => _livePartialTranscript = event.text);
           break;
         case 'speech_end':
-          setState(() {
-            _engineState = VoiceEngineState.understanding;
-          });
+          setState(() => _engineState = VoiceEngineState.understanding);
           break;
         case 'final':
           final spoken = event.text.trim();
@@ -111,8 +111,12 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
             _isListening = false;
             _pushAmplitude(0.08);
           });
-          // Error 6 (speech timeout) or 7 (no match): seamlessly restart in auto-loop mode
-          if ((event.code == 6 || event.code == 7) && _sessionActive && _autoLoop && !_isMuted && !_isThinking && !_isSpeaking) {
+          if ((event.code == 6 || event.code == 7) &&
+              _sessionActive &&
+              _autoLoop &&
+              !_isMuted &&
+              !_isThinking &&
+              !_isSpeaking) {
             _scheduleAutoListen(delayMs: 700);
           } else if (event.code != 5) {
             setState(() {
@@ -154,7 +158,13 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
   void _scheduleAutoListen({int delayMs = 500}) {
     _autoRestartTimer?.cancel();
     _autoRestartTimer = Timer(Duration(milliseconds: delayMs), () {
-      if (mounted && _sessionActive && _autoLoop && !_isMuted && !_isThinking && !_isSpeaking && !_isListening) {
+      if (mounted &&
+          _sessionActive &&
+          _autoLoop &&
+          !_isMuted &&
+          !_isThinking &&
+          !_isSpeaking &&
+          !_isListening) {
         _startListeningNow();
       }
     });
@@ -169,7 +179,7 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
           SnackBar(
             content: Text(
               isAr
-                  ? 'يرجى السماح بصلاحية الميكروفون لتشغيل المحادثة الصوتية اللايف.'
+                  ? 'يرجى السماح بصلاحية الميكروفون لتشغيل المحادثة الصوتية.'
                   : 'Microphone permission is required for Live Voice.',
             ),
           ),
@@ -178,8 +188,7 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
       return;
     }
 
-    final bridge = ref.read(nativeBridgeProvider);
-    await bridge.stopSpeaking();
+    await ref.read(realisticTtsProvider).stop();
 
     setState(() {
       _sessionActive = true;
@@ -191,7 +200,7 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
       _engineState = VoiceEngineState.listening;
     });
 
-    final ok = await bridge.startListening(locale: _voiceLocale);
+    final ok = await ref.read(nativeBridgeProvider).startListening(locale: _voiceLocale);
     if (!ok && mounted) {
       setState(() {
         _isListening = false;
@@ -201,16 +210,15 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
   }
 
   Future<void> _toggleLiveMic() async {
+    NimoSoundFx.click();
     final bridge = ref.read(nativeBridgeProvider);
 
-    // If AI is currently speaking -> Instant Barge-In interruption & start listening immediately!
     if (_isSpeaking) {
-      await bridge.stopSpeaking();
+      await ref.read(realisticTtsProvider).stop();
       await _startListeningNow();
       return;
     }
 
-    // If currently listening -> stop listening and finalize
     if (_isListening) {
       _autoRestartTimer?.cancel();
       await bridge.stopListening();
@@ -222,15 +230,14 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
       return;
     }
 
-    // Otherwise start live listening
     await _startListeningNow();
   }
 
   Future<void> _interruptEverything() async {
+    NimoSoundFx.click();
     _autoRestartTimer?.cancel();
-    final bridge = ref.read(nativeBridgeProvider);
-    await bridge.stopSpeaking();
-    await bridge.cancelListening();
+    await ref.read(realisticTtsProvider).stop();
+    await ref.read(nativeBridgeProvider).cancelListening();
     if (mounted) {
       setState(() {
         _isListening = false;
@@ -255,7 +262,6 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
     });
     _scrollToBottom();
 
-    // 1. Instant local phone command execution (zero latency!)
     final aiSettings = ref.read(aiSettingsProvider);
     if (aiSettings.deviceControlEnabled) {
       final instant = await executor.tryInstantLocalCommand(spokenText, isArabic: isAr);
@@ -269,23 +275,24 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
               timestamp: DateTime.now(),
               actionBadge: instant.actionBadge,
               imageUrl: instant.generatedImageUrl,
-              modelUsed: 'LISORA Phone Engine',
+              modelUsed: 'Nimo Phone Engine',
             ),
           );
         });
         _scrollToBottom();
-        await _speakReply(instant.cleanReply);
+        await _speakHumanReply(instant.cleanReply);
         return;
       }
     }
 
-    // 2. Build GitHub RAG context + Voice-optimized System Prompt
-    final ragContext = ref.read(githubKnowledgeProvider.notifier).buildRagContext(spokenText);
+    final localRag = ref.read(nimoLocalDbProvider.notifier).buildOfflineRagContext(spokenText, limit: 3);
+    final ghRag = ref.read(githubKnowledgeProvider.notifier).buildRagContext(spokenText);
+
     final voiceSystemPrompt = StringBuffer()
       ..writeln(
         isAr
-            ? 'أنت LISORA AI في وضع المحادثة الصوتية المباشرة اللايف. تحدث بشكل طبيعي وودود ومختصر (2 إلى 4 جمل واضحة بدون رموز ماركداون معقدة) لتكون مناسبة للنطق الصوتي الفوري. أجب بنفس لغة المستخدم.'
-            : 'You are LISORA AI in Real-Time Live Voice mode. Reply naturally, warmly, and concisely (2-4 clear sentences without heavy markdown) optimized for spoken conversation.',
+            ? 'أنت Nimo في وضع المحادثة الصوتية البشرية المباشرة. تحدث كإنسان طبيعي ودود ومختصر (2 إلى 4 جمل واضحة بدون رموز ماركداون أو نجوم) لتكون مثالية للنطق البشري الواقعي. أجب بنفس لغة المستخدم.'
+            : 'You are Nimo in Realistic Human Voice mode. Speak like a warm, natural human friend in 2-4 clear spoken sentences with zero markdown symbols.',
       );
     if (aiSettings.deviceControlEnabled) {
       voiceSystemPrompt.writeln(AiToolExecutor.systemToolPrompt);
@@ -297,7 +304,7 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
       settings: aiSettings,
       messages: recentContext,
       systemPromptOverride: voiceSystemPrompt.toString(),
-      ragContext: ragContext,
+      ragContext: '$localRag$ghRag',
     );
 
     if (!mounted) return;
@@ -317,9 +324,15 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
       modelBadge = '${result.providerName} • ${result.modelName}';
       ref.read(learnerProfileProvider.notifier).incrementSpeakingMinutes(1);
     } else {
-      replyText = isAr
-          ? 'حدثت مشكلة مؤقتة في الاتصال بالذكاء الاصطناعي. تأكد من الإنترنت أو راجع مفاتيح API في الإعدادات.'
-          : 'Temporary connection issue. Check your internet or AI API keys in Settings.';
+      final localHits = ref.read(nimoLocalDbProvider.notifier).search(spokenText, limit: 1);
+      if (localHits.isNotEmpty) {
+        replyText = '${localHits.first.title}. ${localHits.first.body}';
+        modelBadge = 'Nimo Offline DB';
+      } else {
+        replyText = isAr
+            ? 'حدثت مشكلة مؤقتة في الاتصال. تأكد من الإنترنت أو راجع مفاتيح API في الإعدادات.'
+            : 'Temporary connection issue. Check your internet or AI API keys in Settings.';
+      }
     }
 
     setState(() {
@@ -336,19 +349,44 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
       );
     });
     _scrollToBottom();
-    await _speakReply(replyText);
+    await _speakHumanReply(replyText);
   }
 
-  Future<void> _speakReply(String text) async {
-    final bridge = ref.read(nativeBridgeProvider);
+  Future<void> _speakHumanReply(String text) async {
+    final aiSettings = ref.read(aiSettingsProvider);
     final ttsLocale = NativeBridgeService.containsArabic(text)
         ? (_voiceLocale.startsWith('ar') ? _voiceLocale : 'ar-EG')
         : (_voiceLocale.startsWith('en') ? _voiceLocale : 'en-US');
-    setState(() {
-      _isSpeaking = true;
-      _engineState = VoiceEngineState.speaking;
-    });
-    await bridge.speak(text, locale: ttsLocale, rate: _speechRate);
+
+    final engineUsed = await ref.read(realisticTtsProvider).speakHuman(
+          text: text,
+          aiSettings: aiSettings,
+          locale: ttsLocale,
+          rate: _speechRate,
+          onStart: () {
+            if (!mounted) return;
+            setState(() {
+              _isSpeaking = true;
+              _engineState = VoiceEngineState.speaking;
+            });
+          },
+          onDone: () {
+            if (!mounted) return;
+            setState(() {
+              _isSpeaking = false;
+              _pushAmplitude(0.08);
+              if (!_isThinking && !_isListening) {
+                _engineState = VoiceEngineState.listening;
+              }
+            });
+            if (_sessionActive && _autoLoop && !_isMuted && !_isThinking) {
+              _scheduleAutoListen(delayMs: 420);
+            }
+          },
+        );
+    if (mounted) {
+      setState(() => _activeVoiceEngineLabel = engineUsed);
+    }
   }
 
   void _scrollToBottom() {
@@ -364,23 +402,27 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
   }
 
   void _openQuickTypeDialog() {
+    NimoSoundFx.click();
     final ctrl = TextEditingController();
     final isAr = ref.read(learnerProfileProvider).uiLocale == 'ar';
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(isAr ? 'اكتب للمساعد الصوتي' : 'Type to Voice AI'),
+        title: Text(isAr ? 'اكتب لمساعد Nimo الصوتي' : 'Type to Nimo Voice'),
         content: TextField(
           controller: ctrl,
           autofocus: true,
           decoration: InputDecoration(
-            hintText: isAr ? 'مثال: افتح واتساب أو اشرح لي الذكاء الاصطناعي...' : 'Ask anything or give a phone command...',
+            hintText: isAr
+                ? 'مثال: افتح واتساب أو اشرح لي الذكاء الاصطناعي...'
+                : 'Ask anything or give a phone command...',
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: Text(isAr ? 'إلغاء' : 'Cancel')),
           FilledButton(
             onPressed: () {
+              NimoSoundFx.pop();
               final txt = ctrl.text.trim();
               Navigator.pop(ctx);
               if (txt.isNotEmpty) _processUserSpeech(txt);
@@ -392,11 +434,60 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
     );
   }
 
+  void _showVoiceProfilePicker() {
+    NimoSoundFx.click();
+    final ai = ref.read(aiSettingsProvider);
+    final isAr = ref.read(learnerProfileProvider).uiLocale == 'ar';
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+          children: [
+            Text(
+              isAr ? 'اختر الصوت البشري الواقعي' : 'Choose Realistic Human Voice',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              isAr
+                  ? 'يستخدم Nimo تلقائياً OpenAI HD أو ElevenLabs عند إضافة المفتاح، أو أعلى صوت Neural بشري على الهاتف.'
+                  : 'Nimo automatically uses OpenAI HD or ElevenLabs when configured, or the highest-quality Neural device voice.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 10),
+            ...RealisticTtsService.presets.map((p) {
+              final sel = ai.voicePresetId == p.id;
+              return ListTile(
+                leading: IosIconBadge(
+                  icon: CupertinoIcons.waveform_circle_fill,
+                  color: sel ? TalkoraColors.iosGreen : TalkoraColors.iosBlue,
+                ),
+                title: Text(isAr ? p.labelAr : p.labelEn, style: const TextStyle(fontWeight: FontWeight.w600)),
+                trailing: sel ? const Icon(CupertinoIcons.checkmark_alt, color: TalkoraColors.iosGreen) : null,
+                onTap: () {
+                  NimoSoundFx.click();
+                  ref.read(aiSettingsProvider.notifier).updateAdvanced(voicePresetId: p.id);
+                  Navigator.pop(ctx);
+                },
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _stateHeadline(bool isAr) {
     if (_isListening) return isAr ? 'أستمع إليك الآن... تحدث بحرية' : 'Listening... Speak naturally';
-    if (_isThinking) return isAr ? 'جاري التفكير والبحث في قواعد البيانات...' : 'Thinking & querying knowledge...';
-    if (_isSpeaking) return isAr ? 'LISORA AI يتحدث الآن (اضغط للمقاطعة)' : 'LISORA AI Speaking (Tap to interrupt)';
-    return isAr ? 'اضغط على الميكروفون لبدء المحادثة اللايف' : 'Tap microphone to start Live Voice';
+    if (_isThinking) return isAr ? 'Nimo يفكر ويبحث في القواعد...' : 'Nimo is thinking...';
+    if (_isSpeaking) return isAr ? 'Nimo يتحدث بصوت طبيعي (اضغط للمقاطعة)' : 'Nimo Speaking (Tap to interrupt)';
+    return isAr ? 'اضغط على الميكروفون للتحدث مع Nimo' : 'Tap microphone to talk with Nimo';
   }
 
   @override
@@ -404,9 +495,8 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
     _autoRestartTimer?.cancel();
     _voiceSub?.cancel();
     _transcriptScrollCtrl.dispose();
-    final bridge = ref.read(nativeBridgeProvider);
-    bridge.cancelListening();
-    bridge.stopSpeaking();
+    ref.read(nativeBridgeProvider).cancelListening();
+    ref.read(realisticTtsProvider).stop();
     super.dispose();
   }
 
@@ -414,22 +504,29 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
   Widget build(BuildContext context) {
     final ai = ref.watch(aiSettingsProvider);
     final gh = ref.watch(githubKnowledgeProvider);
+    final localDb = ref.watch(nimoLocalDbProvider);
     final isAr = ref.watch(learnerProfileProvider).uiLocale == 'ar';
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final totalKnowledge = localDb.totalRecords + gh.totalEntries;
 
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(CupertinoIcons.back),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            NimoSoundFx.click();
+            context.pop();
+          },
         ),
         title: Column(
           children: [
-            Text(isAr ? 'المحادثة الصوتية اللايف' : 'Live Voice AI', style: theme.textTheme.titleMedium),
+            Text(isAr ? 'صوت Nimo البشري اللايف' : 'Nimo Realistic Voice', style: theme.textTheme.titleMedium),
             const SizedBox(height: 2),
             IosStatusPill(
-              label: '${ai.activePreset.shortName} • ${_localeLabels[_voiceLocale] ?? _voiceLocale}',
+              label: _activeVoiceEngineLabel.isNotEmpty
+                  ? _activeVoiceEngineLabel
+                  : '${ai.activePreset.shortName} • ${_localeLabels[_voiceLocale] ?? _voiceLocale}',
               color: _isListening
                   ? TalkoraColors.iosGreen
                   : (_isSpeaking ? TalkoraColors.iosBlue : TalkoraColors.iosIndigo),
@@ -438,14 +535,14 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: isAr ? 'اختيار الصوت البشري' : 'Human Voice Profile',
+            icon: const Icon(CupertinoIcons.waveform_circle, size: 22),
+            onPressed: _showVoiceProfilePicker,
+          ),
+          IconButton(
             tooltip: isAr ? 'إرسال نص سريع' : 'Quick Type',
             icon: const Icon(CupertinoIcons.keyboard, size: 21),
             onPressed: _openQuickTypeDialog,
-          ),
-          IconButton(
-            tooltip: isAr ? 'إعدادات النماذج' : 'AI Settings',
-            icon: const Icon(CupertinoIcons.slider_horizontal_3, size: 21),
-            onPressed: () => context.push('/settings'),
           ),
         ],
       ),
@@ -454,11 +551,19 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
           padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
           child: Column(
             children: [
-              // Voice Language & Auto-Loop Controls Bar
+              // Voice Language, Human Voice Profile & Auto-Loop Controls Bar
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(end: 8),
+                      child: ActionChip(
+                        avatar: const Icon(CupertinoIcons.person_crop_circle_badge_checkmark, size: 16),
+                        label: Text(isAr ? 'الصوت البشري' : 'Human Voice', style: const TextStyle(fontSize: 12)),
+                        onPressed: _showVoiceProfilePicker,
+                      ),
+                    ),
                     ..._localeLabels.entries.map((entry) {
                       final selected = _voiceLocale == entry.key;
                       return Padding(
@@ -467,6 +572,7 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
                           label: Text(entry.value, style: const TextStyle(fontSize: 12)),
                           selected: selected,
                           onSelected: (_) {
+                            NimoSoundFx.click();
                             setState(() => _voiceLocale = entry.key);
                             ref.read(aiSettingsProvider.notifier).updateAdvanced(voiceLocale: entry.key);
                           },
@@ -479,10 +585,10 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
                         size: 15,
                         color: _autoLoop ? theme.colorScheme.primary : null,
                       ),
-                      label: Text(isAr ? 'استماع تلقائي مستمر' : 'Hands-Free Loop',
-                          style: const TextStyle(fontSize: 12)),
+                      label: Text(isAr ? 'استماع مستمر' : 'Hands-Free', style: const TextStyle(fontSize: 12)),
                       selected: _autoLoop,
                       onSelected: (v) {
+                        NimoSoundFx.click();
                         setState(() => _autoLoop = v);
                         ref.read(aiSettingsProvider.notifier).updateAdvanced(voiceAutoLoopEnabled: v);
                       },
@@ -492,13 +598,13 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
               ),
               const SizedBox(height: 14),
 
-              // Interactive Live Voice Orb (Tap to talk / Tap to interrupt)
+              // Interactive Live Voice Orb
               GestureDetector(
                 onTap: _toggleLiveMic,
                 child: TalkoraVoiceOrb(
                   state: _engineState,
                   audioLevel: _isSpeaking ? 0.45 : _currentLevel,
-                  size: 148,
+                  size: 144,
                 ),
               ),
               const SizedBox(height: 12),
@@ -507,13 +613,13 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
                 style: theme.textTheme.titleMedium,
                 textAlign: TextAlign.center,
               ),
-              if (gh.totalEntries > 0)
+              if (totalKnowledge > 0)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
                     isAr
-                        ? 'مرتبط بـ ${gh.totalEntries} سجل معرفي من GitHub + تحكم كامل بالهاتف'
-                        : 'Connected to ${gh.totalEntries} GitHub records + Full Phone Control',
+                        ? 'مرتبط بـ $totalKnowledge سجل معرفي + صوت بشري طبيعي'
+                        : 'Connected to $totalKnowledge records + Realistic Human Voice',
                     style: theme.textTheme.bodySmall?.copyWith(color: TalkoraColors.iosGreen),
                   ),
                 ),
@@ -528,14 +634,12 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
                 ),
               const SizedBox(height: 10),
 
-              // Live Audio Waveform
               TalkoraWaveform(
                 amplitudeHistory: _amplitudes,
                 height: 44,
                 color: _isSpeaking ? TalkoraColors.iosGreen : theme.colorScheme.primary,
               ),
 
-              // Live Partial Speech Preview Banner
               if (_livePartialTranscript.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Container(
@@ -554,23 +658,17 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
               ],
               const SizedBox(height: 10),
 
-              // Live Conversation Transcript Feed
               Expanded(
                 child: _turns.isEmpty
                     ? Center(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                isAr
-                                    ? 'جرّب قول: "افتح واتساب" أو "شغل الكشاف" أو "ابحث في يوتيوب عن فلاتر" أو اسأل أي سؤال علمي أو برمجي!'
-                                    : 'Try saying: "Open WhatsApp", "Turn on flashlight", "Search YouTube for Flutter", or ask any question!',
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.bodyMedium,
-                              ),
-                            ],
+                          child: Text(
+                            isAr
+                                ? 'تحدث مع Nimo بصوت طبيعي واقعي! جرّب: "افتح واتساب" أو "اشرح لي Flutter" أو اسأل أي سؤال.'
+                                : 'Speak with Nimo in a natural human voice! Try "Open WhatsApp" or ask anything.',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium,
                           ),
                         ),
                       )
@@ -586,7 +684,7 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
                                 : AlignmentDirectional.centerStart,
                             child: Container(
                               constraints: BoxConstraints(
-                                maxWidth: MediaQuery.of(context).size.width * 0.82,
+                                maxWidth: MediaQuery.of(context).size.width * 0.84,
                               ),
                               margin: const EdgeInsets.symmetric(vertical: 5),
                               padding: const EdgeInsets.all(13),
@@ -607,25 +705,13 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
                                     ),
                                     const SizedBox(height: 6),
                                   ],
-                                  Text(
+                                  SelectableText(
                                     msg.content,
                                     style: theme.textTheme.bodyLarge?.copyWith(
                                       color: isUser ? Colors.white : null,
                                       fontSize: 15,
                                     ),
                                   ),
-                                  if (msg.imageUrl != null && msg.imageUrl!.isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Image.network(
-                                        msg.imageUrl!,
-                                        height: 180,
-                                        width: double.infinity,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ],
                                   if (!isUser && msg.modelUsed != null) ...[
                                     const SizedBox(height: 4),
                                     Text(msg.modelUsed!, style: theme.textTheme.bodySmall),
@@ -638,8 +724,7 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
                       ),
               ),
 
-              const SizedBox(height: 10),
-              // Speech Speed Compact Slider
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Icon(CupertinoIcons.speedometer, size: 17, color: theme.colorScheme.primary),
@@ -647,9 +732,9 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
                   Text(isAr ? 'سرعة الصوت' : 'Speed', style: theme.textTheme.bodySmall),
                   Expanded(
                     child: CupertinoSlider(
-                      value: _speechRate.clamp(0.6, 1.6),
-                      min: 0.6,
-                      max: 1.6,
+                      value: _speechRate.clamp(0.65, 1.5),
+                      min: 0.65,
+                      max: 1.5,
                       divisions: 10,
                       activeColor: theme.colorScheme.primary,
                       onChanged: (v) {
@@ -663,24 +748,20 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Bottom Voice Controls Bar
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   IconButton.filledTonal(
                     onPressed: () {
+                      NimoSoundFx.click();
                       setState(() => _isMuted = !_isMuted);
-                      if (_isMuted) {
-                        ref.read(nativeBridgeProvider).cancelListening();
-                      }
+                      if (_isMuted) ref.read(nativeBridgeProvider).cancelListening();
                     },
                     icon: Icon(_isMuted ? CupertinoIcons.mic_slash_fill : CupertinoIcons.mic_fill),
-                    tooltip: _isMuted ? (isAr ? 'إلغاء الكتم' : 'Unmute') : (isAr ? 'كتم' : 'Mute'),
                   ),
                   IconButton.filledTonal(
                     onPressed: _interruptEverything,
                     icon: const Icon(CupertinoIcons.stop_fill),
-                    tooltip: isAr ? 'إيقاف فوري' : 'Stop',
                   ),
                   SizedBox(
                     width: 72,
@@ -711,7 +792,6 @@ class _LiveVoiceScreenState extends ConsumerState<LiveVoiceScreen> {
                       context.pop();
                     },
                     icon: const Icon(CupertinoIcons.phone_down_fill),
-                    tooltip: isAr ? 'إنهاء المكالمة' : 'End Call',
                   ),
                 ],
               ),

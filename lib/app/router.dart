@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:talkora_ai/app/theme/app_theme.dart';
+import 'package:talkora_ai/core/audio/sound_fx_service.dart';
 import 'package:talkora_ai/core/storage/app_state_provider.dart';
 import 'package:talkora_ai/features/ai_chat/ai_chat_screen.dart';
 import 'package:talkora_ai/features/challenges/daily_challenge_screen.dart';
+import 'package:talkora_ai/features/coding_lab/coding_lab_screen.dart';
 import 'package:talkora_ai/features/device_hub/device_hub_screen.dart';
 import 'package:talkora_ai/features/github_db/github_db_screen.dart';
 import 'package:talkora_ai/features/grammar/grammar_screen.dart';
@@ -35,12 +37,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/voice', builder: (_, __) => const LiveVoiceScreen()),
       GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
       GoRoute(path: '/image-studio', builder: (_, __) => const ImageStudioScreen()),
+      GoRoute(path: '/coding-lab', builder: (_, __) => const CodingLabScreen()),
       GoRoute(path: '/github-db', builder: (_, __) => const GithubDbScreen()),
       GoRoute(path: '/device-hub', builder: (_, __) => const DeviceHubScreen()),
       GoRoute(path: '/roleplay', builder: (_, __) => const RoleplayScreen()),
       GoRoute(path: '/writing', builder: (_, __) => const WritingLabScreen()),
       GoRoute(path: '/translator', builder: (_, __) => const TranslatorScreen()),
       GoRoute(path: '/progress', builder: (_, __) => const ProgressScreen()),
+      GoRoute(path: '/practice-hub', builder: (_, __) => const PracticeHubScreen()),
+      GoRoute(path: '/vocabulary-list', builder: (_, __) => const VocabularyScreen()),
       GoRoute(path: '/practice/pronunciation', builder: (_, __) => const PronunciationScreen()),
       GoRoute(path: '/practice/grammar', builder: (_, __) => const GrammarScreen()),
       GoRoute(path: '/practice/listening', builder: (_, __) => const ListeningScreen()),
@@ -50,8 +55,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         branches: [
           StatefulShellBranch(routes: [GoRoute(path: '/home', builder: (_, __) => const HomeScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/chat', builder: (_, __) => const AiChatScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: '/practice', builder: (_, __) => const PracticeHubScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: '/vocabulary', builder: (_, __) => const VocabularyScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: '/practice', builder: (_, __) => const CodingLabScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: '/vocabulary', builder: (_, __) => const GithubDbScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen())]),
         ],
       ),
@@ -59,7 +64,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   );
 });
 
-/// Authentic iOS 18 Translucent Frosted-Glass Cupertino Tab Bar Shell.
+/// Nimo Liquid Glass Translucent Bottom Tab Bar Shell with click sound & glass active halo.
 class _IosMainShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
   const _IosMainShell({required this.navigationShell});
@@ -72,27 +77,31 @@ class _IosMainShell extends ConsumerWidget {
     final activeColor = theme.colorScheme.primary;
     final inactiveColor = isDark ? TalkoraColors.darkSecondaryText : TalkoraColors.lightSecondaryText;
 
+    void switchTab(int idx) {
+      NimoSoundFx.click();
+      navigationShell.goBranch(idx, initialLocation: navigationShell.currentIndex == idx);
+    }
+
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: ClipRect(
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
           child: Container(
             decoration: BoxDecoration(
               color: (isDark ? TalkoraColors.darkSurface : TalkoraColors.lightSurface)
-                  .withValues(alpha: 0.88),
+                  .withValues(alpha: 0.86),
               border: Border(
                 top: BorderSide(
-                  color: (isDark ? TalkoraColors.darkSeparator : TalkoraColors.lightSeparator)
-                      .withValues(alpha: 0.45),
-                  width: 0.5,
+                  color: Colors.white.withValues(alpha: isDark ? 0.12 : 0.45),
+                  width: 0.6,
                 ),
               ),
             ),
             child: SafeArea(
               top: false,
               child: SizedBox(
-                height: 58,
+                height: 62,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
@@ -103,7 +112,7 @@ class _IosMainShell extends ConsumerWidget {
                       selected: navigationShell.currentIndex == 0,
                       activeColor: activeColor,
                       inactiveColor: inactiveColor,
-                      onTap: () => navigationShell.goBranch(0, initialLocation: navigationShell.currentIndex == 0),
+                      onTap: () => switchTab(0),
                     ),
                     _IosTabItem(
                       icon: CupertinoIcons.sparkles,
@@ -112,25 +121,25 @@ class _IosMainShell extends ConsumerWidget {
                       selected: navigationShell.currentIndex == 1,
                       activeColor: activeColor,
                       inactiveColor: inactiveColor,
-                      onTap: () => navigationShell.goBranch(1, initialLocation: navigationShell.currentIndex == 1),
+                      onTap: () => switchTab(1),
                     ),
                     _IosTabItem(
-                      icon: CupertinoIcons.book,
-                      activeIcon: CupertinoIcons.book_fill,
+                      icon: CupertinoIcons.chevron_left_slash_chevron_right,
+                      activeIcon: CupertinoIcons.chevron_left_slash_chevron_right,
                       label: s.t('nav_practice'),
                       selected: navigationShell.currentIndex == 2,
                       activeColor: activeColor,
                       inactiveColor: inactiveColor,
-                      onTap: () => navigationShell.goBranch(2, initialLocation: navigationShell.currentIndex == 2),
+                      onTap: () => switchTab(2),
                     ),
                     _IosTabItem(
-                      icon: CupertinoIcons.rectangle_stack,
-                      activeIcon: CupertinoIcons.rectangle_stack_fill,
+                      icon: CupertinoIcons.layers_alt,
+                      activeIcon: CupertinoIcons.layers_alt_fill,
                       label: s.t('nav_vocab'),
                       selected: navigationShell.currentIndex == 3,
                       activeColor: activeColor,
                       inactiveColor: inactiveColor,
-                      onTap: () => navigationShell.goBranch(3, initialLocation: navigationShell.currentIndex == 3),
+                      onTap: () => switchTab(3),
                     ),
                     _IosTabItem(
                       icon: CupertinoIcons.person_crop_circle,
@@ -139,7 +148,7 @@ class _IosMainShell extends ConsumerWidget {
                       selected: navigationShell.currentIndex == 4,
                       activeColor: activeColor,
                       inactiveColor: inactiveColor,
-                      onTap: () => navigationShell.goBranch(4, initialLocation: navigationShell.currentIndex == 4),
+                      onTap: () => switchTab(4),
                     ),
                   ],
                 ),
@@ -182,13 +191,26 @@ class _IosTabItem extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(selected ? activeIcon : icon, color: color, size: 23),
-            const SizedBox(height: 3),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              decoration: BoxDecoration(
+                color: selected ? activeColor.withValues(alpha: 0.16) : Colors.transparent,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: selected ? activeColor.withValues(alpha: 0.35) : Colors.transparent,
+                  width: 0.7,
+                ),
+              ),
+              child: Icon(selected ? activeIcon : icon, color: color, size: 22),
+            ),
+            const SizedBox(height: 2),
             Text(
               label,
               style: TextStyle(
                 fontSize: 10.5,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                 color: color,
               ),
               maxLines: 1,

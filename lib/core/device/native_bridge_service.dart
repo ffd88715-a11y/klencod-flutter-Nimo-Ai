@@ -17,6 +17,30 @@ class InstalledAppInfo {
   }
 }
 
+/// Native Android TTS voice descriptor for realistic voice selection.
+class NativeVoiceInfo {
+  final String name;
+  final String locale;
+  final int quality;
+  final bool isNetwork;
+
+  const NativeVoiceInfo({
+    required this.name,
+    required this.locale,
+    this.quality = 400,
+    this.isNetwork = false,
+  });
+
+  factory NativeVoiceInfo.fromMap(Map<dynamic, dynamic> map) {
+    return NativeVoiceInfo(
+      name: (map['name'] ?? '').toString(),
+      locale: (map['locale'] ?? '').toString(),
+      quality: (map['quality'] as num?)?.toInt() ?? 400,
+      isNetwork: map['isNetwork'] == true,
+    );
+  }
+}
+
 /// Live Android hardware & battery telemetry.
 class DeviceStatusInfo {
   final int batteryLevel;
@@ -52,7 +76,7 @@ class DeviceStatusInfo {
 
 /// Real-time event emitted by native Android SpeechRecognizer & TextToSpeech.
 class NativeVoiceEvent {
-  final String type; // ready, speech_start, rms, partial, final, speech_end, error, tts_start, tts_done, tts_error, tts_stopped
+  final String type;
   final String text;
   final double level;
   final int code;
@@ -80,7 +104,7 @@ class NativeVoiceEvent {
   }
 }
 
-/// Unified Flutter <-> Native Android Bridge for Live Voice (STT/TTS) & Full Phone Management.
+/// Unified Flutter <-> Native Android Bridge for Live Voice (STT/TTS), Tactile Sound & Phone Management.
 class NativeBridgeService {
   static const MethodChannel _channel = MethodChannel('ai.talkora.app/native_bridge');
   static const EventChannel _voiceEventsChannel = EventChannel('ai.talkora.app/voice_events');
@@ -95,7 +119,14 @@ class NativeBridgeService {
     return _cachedVoiceStream!;
   }
 
-  // ==================== LIVE VOICE (STT / TTS) ====================
+  // ==================== TACTILE CLICK SOUND ====================
+  Future<void> playClickSound() async {
+    try {
+      await _channel.invokeMethod<bool>('playClickSound');
+    } catch (_) {}
+  }
+
+  // ==================== LIVE VOICE (STT / NEURAL TTS) ====================
   Future<bool> isSpeechAvailable() async {
     try {
       return await _channel.invokeMethod<bool>('isSpeechAvailable') ?? false;
@@ -124,11 +155,24 @@ class NativeBridgeService {
     } catch (_) {}
   }
 
+  Future<List<NativeVoiceInfo>> getAvailableVoices({String? localePrefix}) async {
+    try {
+      final raw = await _channel.invokeMethod<List<dynamic>>('getAvailableVoices', {
+        if (localePrefix != null) 'localePrefix': localePrefix,
+      });
+      if (raw == null) return const [];
+      return raw.whereType<Map<dynamic, dynamic>>().map(NativeVoiceInfo.fromMap).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Future<bool> speak(
     String text, {
     String? locale,
-    double rate = 1.0,
-    double pitch = 1.0,
+    double rate = 0.98,
+    double pitch = 0.97,
+    String? voiceName,
   }) async {
     final clean = text.trim();
     if (clean.isEmpty) return false;
@@ -139,6 +183,7 @@ class NativeBridgeService {
             'locale': detectedLocale,
             'rate': rate,
             'pitch': pitch,
+            if (voiceName != null && voiceName.isNotEmpty) 'voiceName': voiceName,
           }) ??
           false;
     } catch (_) {
@@ -235,7 +280,7 @@ class NativeBridgeService {
     }
   }
 
-  Future<bool> setAlarm({required int hour, required int minute, String message = 'LISORA AI'}) async {
+  Future<bool> setAlarm({required int hour, required int minute, String message = 'Nimo'}) async {
     try {
       return await _channel.invokeMethod<bool>('setAlarm', {
             'hour': hour,
@@ -248,7 +293,7 @@ class NativeBridgeService {
     }
   }
 
-  Future<bool> setTimer({required int seconds, String message = 'LISORA AI Timer'}) async {
+  Future<bool> setTimer({required int seconds, String message = 'Nimo Timer'}) async {
     try {
       return await _channel.invokeMethod<bool>('setTimer', {
             'seconds': seconds,
@@ -304,7 +349,7 @@ class NativeBridgeService {
     return const DeviceStatusInfo();
   }
 
-  Future<bool> shareText(String text, {String subject = 'LISORA AI'}) async {
+  Future<bool> shareText(String text, {String subject = 'Nimo'}) async {
     try {
       return await _channel.invokeMethod<bool>('shareText', {
             'text': text,

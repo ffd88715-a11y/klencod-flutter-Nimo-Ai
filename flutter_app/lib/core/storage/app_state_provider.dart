@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:talkora_ai/app/localization/app_strings.dart';
 import 'package:talkora_ai/core/ai/ai_provider_models.dart';
 import 'package:talkora_ai/core/ai/universal_ai_service.dart';
+import 'package:talkora_ai/core/audio/sound_fx_service.dart';
 import 'package:talkora_ai/core/constants/api_config.dart';
 
 class LearnerProfileState {
@@ -20,6 +21,8 @@ class LearnerProfileState {
   final ThemeMode themeMode;
   final String accentColorKey;
   final bool memoryEnabled;
+  final bool clickSoundEnabled;
+  final bool glassIconAnimationEnabled;
   final String serverBaseUrl;
   final int speakingMinutesToday;
   final int vocabularyLearned;
@@ -39,6 +42,8 @@ class LearnerProfileState {
     this.themeMode = ThemeMode.dark,
     this.accentColorKey = 'blue',
     this.memoryEnabled = true,
+    this.clickSoundEnabled = true,
+    this.glassIconAnimationEnabled = true,
     this.serverBaseUrl = ApiConfig.defaultBaseUrl,
     this.speakingMinutesToday = 9,
     this.vocabularyLearned = 24,
@@ -59,6 +64,8 @@ class LearnerProfileState {
     ThemeMode? themeMode,
     String? accentColorKey,
     bool? memoryEnabled,
+    bool? clickSoundEnabled,
+    bool? glassIconAnimationEnabled,
     String? serverBaseUrl,
     int? speakingMinutesToday,
     int? vocabularyLearned,
@@ -78,6 +85,8 @@ class LearnerProfileState {
       themeMode: themeMode ?? this.themeMode,
       accentColorKey: accentColorKey ?? this.accentColorKey,
       memoryEnabled: memoryEnabled ?? this.memoryEnabled,
+      clickSoundEnabled: clickSoundEnabled ?? this.clickSoundEnabled,
+      glassIconAnimationEnabled: glassIconAnimationEnabled ?? this.glassIconAnimationEnabled,
       serverBaseUrl: serverBaseUrl ?? this.serverBaseUrl,
       speakingMinutesToday: speakingMinutesToday ?? this.speakingMinutesToday,
       vocabularyLearned: vocabularyLearned ?? this.vocabularyLearned,
@@ -96,6 +105,8 @@ class LearnerProfileNotifier extends StateNotifier<LearnerProfileState> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final themeIdx = prefs.getInt('theme_mode') ?? ThemeMode.dark.index;
+      final clickSound = prefs.getBool('click_sound_enabled') ?? true;
+      NimoSoundFx.enabled = clickSound;
       state = state.copyWith(
         onboardingCompleted: prefs.getBool('onboarding_completed') ?? false,
         displayName: prefs.getString('display_name') ?? 'YOSSEF JOO',
@@ -109,12 +120,12 @@ class LearnerProfileNotifier extends StateNotifier<LearnerProfileState> {
         themeMode: ThemeMode.values[themeIdx.clamp(0, 2)],
         accentColorKey: prefs.getString('accent_color_key') ?? 'blue',
         memoryEnabled: prefs.getBool('memory_enabled') ?? true,
+        clickSoundEnabled: clickSound,
+        glassIconAnimationEnabled: prefs.getBool('glass_icon_anim_enabled') ?? true,
         serverBaseUrl: prefs.getString('server_base_url') ?? ApiConfig.defaultBaseUrl,
         xpPoints: prefs.getInt('xp_points') ?? 420,
       );
-    } catch (_) {
-      // Safe fallback in unit/widget test environments without platform channels
-    }
+    } catch (_) {}
   }
 
   Future<void> saveOnboarding({
@@ -173,6 +184,23 @@ class LearnerProfileNotifier extends StateNotifier<LearnerProfileState> {
     } catch (_) {}
   }
 
+  Future<void> setClickSoundEnabled(bool enabled) async {
+    NimoSoundFx.enabled = enabled;
+    state = state.copyWith(clickSoundEnabled: enabled);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('click_sound_enabled', enabled);
+    } catch (_) {}
+  }
+
+  Future<void> setGlassIconAnimationEnabled(bool enabled) async {
+    state = state.copyWith(glassIconAnimationEnabled: enabled);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('glass_icon_anim_enabled', enabled);
+    } catch (_) {}
+  }
+
   Future<void> setEnglishLevel(String level) async {
     state = state.copyWith(englishLevel: level);
     try {
@@ -228,7 +256,7 @@ class LearnerProfileNotifier extends StateNotifier<LearnerProfileState> {
   }
 }
 
-/// Persistent Universal Multi-Provider AI Settings State (v3.0 Smart Router).
+/// Persistent Universal Multi-Provider AI Settings State (Nimo v4.0 Ultra Smart Router).
 class AiSettingsState {
   final String activeProviderId;
   final Map<String, ProviderCredential> credentials;
@@ -241,14 +269,19 @@ class AiSettingsState {
   final bool voiceAutoLoopEnabled;
   final double voiceSpeechRate;
   final String voiceLocale;
+  final String voicePresetId;
+  final String elevenLabsApiKey;
+  final String elevenLabsVoiceId;
+  final String nativeVoiceName;
+  final String customImageModel;
 
   const AiSettingsState({
     this.activeProviderId = 'pollinations',
     this.credentials = const {},
     this.temperature = 0.7,
-    this.maxTokens = 2048,
+    this.maxTokens = 4096,
     this.customSystemPrompt =
-        'You are LISORA AI v3.0 — an ultra-intelligent personal AI assistant, English speaking coach, coder, and smart phone controller developed by YOSSEF JOO. '
+        'You are Nimo v4.0 Ultra — an ultra-intelligent personal AI assistant, expert programmer, realistic voice companion, and smart phone controller developed by YOSSEF JOO. '
         'Answer clearly, accurately, and naturally in the user language (Arabic or English).',
     this.smartFallbackEnabled = true,
     this.deepThinkingEnabled = false,
@@ -256,6 +289,11 @@ class AiSettingsState {
     this.voiceAutoLoopEnabled = true,
     this.voiceSpeechRate = 1.0,
     this.voiceLocale = 'ar-EG',
+    this.voicePresetId = 'auto_human',
+    this.elevenLabsApiKey = '',
+    this.elevenLabsVoiceId = '21m00Tcm4TlvDq8ikWAM',
+    this.nativeVoiceName = '',
+    this.customImageModel = '',
   });
 
   AiProviderPreset get activePreset => AiProviderCatalog.byId(activeProviderId);
@@ -298,6 +336,11 @@ class AiSettingsState {
     bool? voiceAutoLoopEnabled,
     double? voiceSpeechRate,
     String? voiceLocale,
+    String? voicePresetId,
+    String? elevenLabsApiKey,
+    String? elevenLabsVoiceId,
+    String? nativeVoiceName,
+    String? customImageModel,
   }) {
     return AiSettingsState(
       activeProviderId: activeProviderId ?? this.activeProviderId,
@@ -311,6 +354,11 @@ class AiSettingsState {
       voiceAutoLoopEnabled: voiceAutoLoopEnabled ?? this.voiceAutoLoopEnabled,
       voiceSpeechRate: voiceSpeechRate ?? this.voiceSpeechRate,
       voiceLocale: voiceLocale ?? this.voiceLocale,
+      voicePresetId: voicePresetId ?? this.voicePresetId,
+      elevenLabsApiKey: elevenLabsApiKey ?? this.elevenLabsApiKey,
+      elevenLabsVoiceId: elevenLabsVoiceId ?? this.elevenLabsVoiceId,
+      nativeVoiceName: nativeVoiceName ?? this.nativeVoiceName,
+      customImageModel: customImageModel ?? this.customImageModel,
     );
   }
 }
@@ -320,13 +368,18 @@ class AiSettingsNotifier extends StateNotifier<AiSettingsState> {
   static const _kCredentialsMap = 'ai_credentials_map_v2';
   static const _kTemperature = 'ai_temperature_v2';
   static const _kMaxTokens = 'ai_max_tokens_v2';
-  static const _kSystemPrompt = 'ai_system_prompt_v3';
+  static const _kSystemPrompt = 'ai_system_prompt_v4';
   static const _kSmartFallback = 'ai_smart_fallback_v3';
   static const _kDeepThinking = 'ai_deep_thinking_v3';
   static const _kDeviceControl = 'ai_device_control_v3';
   static const _kVoiceAutoLoop = 'ai_voice_auto_loop_v3';
   static const _kVoiceRate = 'ai_voice_rate_v3';
   static const _kVoiceLocale = 'ai_voice_locale_v3';
+  static const _kVoicePreset = 'nimo_voice_preset_v4';
+  static const _kElevenKey = 'nimo_elevenlabs_key_v4';
+  static const _kElevenVoice = 'nimo_elevenlabs_voice_v4';
+  static const _kNativeVoice = 'nimo_native_voice_v4';
+  static const _kCustomImageModel = 'nimo_custom_image_model_v4';
 
   AiSettingsNotifier() : super(const AiSettingsState()) {
     _load();
@@ -350,7 +403,7 @@ class AiSettingsNotifier extends StateNotifier<AiSettingsState> {
         activeProviderId: activeId,
         credentials: map,
         temperature: prefs.getDouble(_kTemperature) ?? 0.7,
-        maxTokens: prefs.getInt(_kMaxTokens) ?? 2048,
+        maxTokens: prefs.getInt(_kMaxTokens) ?? 4096,
         customSystemPrompt: prefs.getString(_kSystemPrompt) ?? state.customSystemPrompt,
         smartFallbackEnabled: prefs.getBool(_kSmartFallback) ?? true,
         deepThinkingEnabled: prefs.getBool(_kDeepThinking) ?? false,
@@ -358,6 +411,11 @@ class AiSettingsNotifier extends StateNotifier<AiSettingsState> {
         voiceAutoLoopEnabled: prefs.getBool(_kVoiceAutoLoop) ?? true,
         voiceSpeechRate: prefs.getDouble(_kVoiceRate) ?? 1.0,
         voiceLocale: prefs.getString(_kVoiceLocale) ?? 'ar-EG',
+        voicePresetId: prefs.getString(_kVoicePreset) ?? 'auto_human',
+        elevenLabsApiKey: prefs.getString(_kElevenKey) ?? '',
+        elevenLabsVoiceId: prefs.getString(_kElevenVoice) ?? '21m00Tcm4TlvDq8ikWAM',
+        nativeVoiceName: prefs.getString(_kNativeVoice) ?? '',
+        customImageModel: prefs.getString(_kCustomImageModel) ?? '',
       );
     } catch (_) {}
   }
@@ -379,6 +437,11 @@ class AiSettingsNotifier extends StateNotifier<AiSettingsState> {
       await prefs.setBool(_kVoiceAutoLoop, state.voiceAutoLoopEnabled);
       await prefs.setDouble(_kVoiceRate, state.voiceSpeechRate);
       await prefs.setString(_kVoiceLocale, state.voiceLocale);
+      await prefs.setString(_kVoicePreset, state.voicePresetId);
+      await prefs.setString(_kElevenKey, state.elevenLabsApiKey);
+      await prefs.setString(_kElevenVoice, state.elevenLabsVoiceId);
+      await prefs.setString(_kNativeVoice, state.nativeVoiceName);
+      await prefs.setString(_kCustomImageModel, state.customImageModel);
     } catch (_) {}
   }
 
@@ -413,6 +476,11 @@ class AiSettingsNotifier extends StateNotifier<AiSettingsState> {
     bool? voiceAutoLoopEnabled,
     double? voiceSpeechRate,
     String? voiceLocale,
+    String? voicePresetId,
+    String? elevenLabsApiKey,
+    String? elevenLabsVoiceId,
+    String? nativeVoiceName,
+    String? customImageModel,
   }) async {
     state = state.copyWith(
       temperature: temperature,
@@ -424,6 +492,11 @@ class AiSettingsNotifier extends StateNotifier<AiSettingsState> {
       voiceAutoLoopEnabled: voiceAutoLoopEnabled,
       voiceSpeechRate: voiceSpeechRate,
       voiceLocale: voiceLocale,
+      voicePresetId: voicePresetId,
+      elevenLabsApiKey: elevenLabsApiKey,
+      elevenLabsVoiceId: elevenLabsVoiceId,
+      nativeVoiceName: nativeVoiceName,
+      customImageModel: customImageModel,
     );
     await _persist();
   }
